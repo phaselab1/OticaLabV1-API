@@ -1,10 +1,11 @@
 from app.appointments.exceptions import AppointmentNotFoundError
-from app.appointments.model import Appointment, AppointmentStatus
-from app.appointments.repository import AppointmentRepository
+from app.appointments.model import Appointment, AppointmentHistoryEntry, AppointmentStatus
+from app.appointments.repository import AppointmentHistoryRepository, AppointmentRepository
 from app.appointments.schema import AppointmentCreate, AppointmentUpdate
 from app.customers.exceptions import CustomerNotFoundError
 from app.customers.repository import CustomerRepository
 from app.shared.pagination import Page
+from app.users.model import User
 
 
 class AppointmentService:
@@ -14,12 +15,13 @@ class AppointmentService:
         self.repository = repository
         self.customer_repository = customer_repository
 
-    async def create(self, data: AppointmentCreate) -> Appointment:
+    async def create(self, data: AppointmentCreate, current_user: User) -> Appointment:
         customer = await self.customer_repository.get_by_id(data.customer_id)
         if customer is None:
             raise CustomerNotFoundError(data.customer_id)
 
         payload = data.model_dump(mode="json")
+        payload["created_by_user_id"] = current_user.id
         return await self.repository.create(payload)
 
     async def get_all(
@@ -41,9 +43,18 @@ class AppointmentService:
             raise AppointmentNotFoundError(appointment_id)
         return appointment
 
-    async def update(self, appointment_id: str, data: AppointmentUpdate) -> Appointment:
+    async def update(
+        self, appointment_id: str, data: AppointmentUpdate, current_user: User
+    ) -> Appointment:
         payload = data.model_dump(mode="json", exclude_unset=True)
-        appointment = await self.repository.update(appointment_id, payload)
+        appointment = await self.repository.update_with_history(
+            appointment_id,
+            current_user.id,
+            scheduled_at=payload.get("scheduled_at"),
+            status=payload.get("status"),
+            notes=payload.get("notes"),
+            notes_provided="notes" in payload,
+        )
         if appointment is None:
             raise AppointmentNotFoundError(appointment_id)
         return appointment
@@ -52,3 +63,25 @@ class AppointmentService:
         deleted = await self.repository.soft_delete(appointment_id)
         if not deleted:
             raise AppointmentNotFoundError(appointment_id)
+
+
+class AppointmentHistoryService:
+    def __init__(
+        self,
+        repository: AppointmentHistoryRepository,
+        appointment_repository: AppointmentRepository,
+    ) -> None:
+        self.repository = repository
+        self.appointment_repository = appointment_repository
+
+    async def get_by_appointment(
+        self, appointment_id: str, *, page: int, page_size: int
+    ) -> Page[AppointmentHistoryEntry]:
+        appointment = await self.appointment_repository.get_by_id(appointment_id)
+        if appointment is None:
+            raise AppointmentNotFoundError(appointment_id)
+
+        entries, total = await self.repository.get_by_appointment_id(
+            appointment_id, page=page, page_size=page_size
+        )
+        return Page(items=entries, page=page, page_size=page_size, total=total)

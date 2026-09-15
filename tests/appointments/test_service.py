@@ -4,22 +4,25 @@ from typing import Any
 import pytest
 
 from app.appointments.exceptions import AppointmentNotFoundError
-from app.appointments.model import Appointment, AppointmentStatus
+from app.appointments.model import Appointment, AppointmentHistoryEntry, AppointmentStatus
 from app.appointments.schema import AppointmentCreate, AppointmentUpdate
-from app.appointments.service import AppointmentService
+from app.appointments.service import AppointmentHistoryService, AppointmentService
 from app.customers.exceptions import CustomerNotFoundError
 from app.customers.model import Customer
+from app.users.model import User, UserRole
 
 
 class FakeAppointmentRepository:
     def __init__(self) -> None:
         self.rows: dict[str, dict[str, Any]] = {}
+        self.history: list[dict[str, Any]] = []
 
     async def create(self, data: dict[str, Any]) -> Appointment:
         appointment_id = str(len(self.rows) + 1)
         now = datetime.now(UTC).isoformat()
         row = {
             "id": appointment_id,
+            "updated_by_user_id": None,
             "status": AppointmentStatus.SCHEDULED.value,
             "notes": None,
             "created_at": now,
@@ -36,11 +39,43 @@ class FakeAppointmentRepository:
             return None
         return Appointment.from_row(row)
 
-    async def update(self, appointment_id: str, data: dict[str, Any]) -> Appointment | None:
+    async def update_with_history(
+        self,
+        appointment_id: str,
+        changed_by_user_id: str,
+        *,
+        scheduled_at: str | None,
+        status: str | None,
+        notes: str | None,
+        notes_provided: bool,
+    ) -> Appointment | None:
         row = self.rows.get(appointment_id)
         if row is None or row["deleted_at"] is not None:
             return None
-        row.update(data)
+
+        previous = dict(row)
+        if scheduled_at is not None:
+            row["scheduled_at"] = scheduled_at
+        if status is not None:
+            row["status"] = status
+        if notes_provided:
+            row["notes"] = notes
+        row["updated_by_user_id"] = changed_by_user_id
+
+        self.history.append(
+            {
+                "id": str(len(self.history) + 1),
+                "appointment_id": appointment_id,
+                "changed_by_user_id": changed_by_user_id,
+                "previous_scheduled_at": previous["scheduled_at"],
+                "new_scheduled_at": row["scheduled_at"],
+                "previous_status": previous["status"],
+                "new_status": row["status"],
+                "previous_notes": previous["notes"],
+                "new_notes": row["notes"],
+                "changed_at": datetime.now(UTC).isoformat(),
+            }
+        )
         return Appointment.from_row(row)
 
     async def soft_delete(self, appointment_id: str) -> bool:
@@ -49,6 +84,21 @@ class FakeAppointmentRepository:
             return False
         row["deleted_at"] = datetime.now(UTC).isoformat()
         return True
+
+
+class FakeAppointmentHistoryRepository:
+    def __init__(self, appointment_repository: FakeAppointmentRepository) -> None:
+        self.appointment_repository = appointment_repository
+
+    async def get_by_appointment_id(
+        self, appointment_id: str, *, page: int, page_size: int
+    ) -> tuple[list[AppointmentHistoryEntry], int]:
+        entries = [
+            AppointmentHistoryEntry.from_row(row)
+            for row in self.appointment_repository.history
+            if row["appointment_id"] == appointment_id
+        ]
+        return entries, len(entries)
 
 
 class FakeCustomerRepository:
@@ -71,28 +121,51 @@ class FakeCustomerRepository:
 
 
 @pytest.fixture
-def service() -> AppointmentService:
+def current_user() -> User:
+    now = datetime.now(UTC)
+    return User(
+        id="user-1",
+        full_name="Atendente",
+        email="atendente@example.com",
+        password_hash="hash",
+        role=UserRole.ATTENDANT,
+        created_at=now,
+        updated_at=now,
+        deleted_at=None,
+    )
+
+
+@pytest.fixture
+def appointment_repository() -> FakeAppointmentRepository:
+    return FakeAppointmentRepository()
+
+
+@pytest.fixture
+def service(appointment_repository: FakeAppointmentRepository) -> AppointmentService:
     return AppointmentService(
-        FakeAppointmentRepository(),  # type: ignore[arg-type]
+        appointment_repository,  # type: ignore[arg-type]
         FakeCustomerRepository({"customer-1"}),  # type: ignore[arg-type]
     )
 
 
-async def test_create_appointment_for_known_customer(service: AppointmentService) -> None:
+async def test_create_appointment_for_known_customer(
+    service: AppointmentService, current_user: User
+) -> None:
     created = await service.create(
-        AppointmentCreate(customer_id="customer-1", scheduled_at=datetime.now(UTC))
+        AppointmentCreate(customer_id="customer-1", scheduled_at=datetime.now(UTC)), current_user
     )
 
     assert created.customer_id == "customer-1"
+    assert created.created_by_user_id == current_user.id
     assert created.status == AppointmentStatus.SCHEDULED
 
 
 async def test_create_appointment_for_unknown_customer_raises(
-    service: AppointmentService,
+    service: AppointmentService, current_user: User
 ) -> None:
     with pytest.raises(CustomerNotFoundError):
         await service.create(
-            AppointmentCreate(customer_id="missing", scheduled_at=datetime.now(UTC))
+            AppointmentCreate(customer_id="missing", scheduled_at=datetime.now(UTC)), current_user
         )
 
 
@@ -101,24 +174,78 @@ async def test_get_by_id_missing_raises_not_found(service: AppointmentService) -
         await service.get_by_id("missing")
 
 
-async def test_update_status(service: AppointmentService) -> None:
+async def test_update_status_records_history(
+    service: AppointmentService,
+    appointment_repository: FakeAppointmentRepository,
+    current_user: User,
+) -> None:
     created = await service.create(
-        AppointmentCreate(customer_id="customer-1", scheduled_at=datetime.now(UTC))
+        AppointmentCreate(customer_id="customer-1", scheduled_at=datetime.now(UTC)), current_user
     )
 
     updated = await service.update(
-        created.id, AppointmentUpdate(status=AppointmentStatus.CONFIRMED)
+        created.id, AppointmentUpdate(status=AppointmentStatus.CONFIRMED), current_user
     )
 
     assert updated.status == AppointmentStatus.CONFIRMED
+    assert updated.updated_by_user_id == current_user.id
+    assert len(appointment_repository.history) == 1
+    assert appointment_repository.history[0]["previous_status"] == AppointmentStatus.SCHEDULED.value
+    assert appointment_repository.history[0]["new_status"] == AppointmentStatus.CONFIRMED.value
 
 
-async def test_delete_then_get_by_id_raises_not_found(service: AppointmentService) -> None:
+async def test_update_missing_appointment_raises_not_found(
+    service: AppointmentService, current_user: User
+) -> None:
+    with pytest.raises(AppointmentNotFoundError):
+        await service.update(
+            "missing", AppointmentUpdate(status=AppointmentStatus.CONFIRMED), current_user
+        )
+
+
+async def test_delete_then_get_by_id_raises_not_found(
+    service: AppointmentService, current_user: User
+) -> None:
     created = await service.create(
-        AppointmentCreate(customer_id="customer-1", scheduled_at=datetime.now(UTC))
+        AppointmentCreate(customer_id="customer-1", scheduled_at=datetime.now(UTC)), current_user
     )
 
     await service.delete(created.id)
 
     with pytest.raises(AppointmentNotFoundError):
         await service.get_by_id(created.id)
+
+
+async def test_history_service_returns_entries_for_existing_appointment(
+    service: AppointmentService,
+    appointment_repository: FakeAppointmentRepository,
+    current_user: User,
+) -> None:
+    created = await service.create(
+        AppointmentCreate(customer_id="customer-1", scheduled_at=datetime.now(UTC)), current_user
+    )
+    await service.update(
+        created.id, AppointmentUpdate(status=AppointmentStatus.CONFIRMED), current_user
+    )
+
+    history_service = AppointmentHistoryService(
+        FakeAppointmentHistoryRepository(appointment_repository),  # type: ignore[arg-type]
+        appointment_repository,  # type: ignore[arg-type]
+    )
+
+    page = await history_service.get_by_appointment(created.id, page=1, page_size=20)
+
+    assert page.total == 1
+    assert page.items[0].new_status == AppointmentStatus.CONFIRMED
+
+
+async def test_history_service_unknown_appointment_raises_not_found(
+    appointment_repository: FakeAppointmentRepository,
+) -> None:
+    history_service = AppointmentHistoryService(
+        FakeAppointmentHistoryRepository(appointment_repository),  # type: ignore[arg-type]
+        appointment_repository,  # type: ignore[arg-type]
+    )
+
+    with pytest.raises(AppointmentNotFoundError):
+        await history_service.get_by_appointment("missing", page=1, page_size=20)

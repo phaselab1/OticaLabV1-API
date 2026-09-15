@@ -1,0 +1,3762 @@
+{
+  "info": {
+    "_postman_id": "7a7cecfd-d620-4f2b-9168-f15921fc362b",
+    "name": "Ótica Lab API",
+    "description": "API do Ótica Lab — sistema multi-tenant para clínicas/óticas com múltiplas empresas e unidades.\n\n## Como usar esta coleção\n\n1. Ajuste `base_url` (variável de coleção) para onde sua API está rodando.\n2. Preencha `login_email`/`login_password` com um usuário `super_admin`    existente (o primeiro é inserido manualmente no banco — veja    `db/migrations/README.md`).\n3. Rode **Auth > Login** — o token é salvo automaticamente em `access_token`    e reutilizado por todas as pastas seguintes (autenticação em nível de    coleção, tipo Bearer).\n4. As pastas seguem a ordem de dependência do domínio: Users -> Companies    (empresa -> unidade -> conceder acesso) -> Customers -> Appointments.    Cada request de criação salva o ID retornado numa variável de coleção    (`company_id`, `unit_id`, `customer_id`, `appointment_id`, etc.),    reutilizada automaticamente pelas próximas requisições — rode as pastas    em ordem, de cima para baixo, para popular a cadeia toda.\n5. Todo DELETE/revoke fica na última pasta, **Cleanup** — rode-a por    último. Não fica espalhado nas pastas de criação porque o runner do    Postman executa cada pasta inteira antes de passar pra próxima, e    Customers/Appointments ainda precisam da empresa/unidade existirem.\n\n## Hierarquia\n\n```\ncompany (empresa)\n  -> company_unit (unidade/filial)\n        -> customer (cliente, cadastrado numa unidade especifica)\n              -> appointment (agendamento, herda empresa/unidade do cliente)\n```\n\n## Papéis (roles)\n\n- **super_admin** — acesso global; deve informar `company_id`/`company_unit_id`   explicitamente ao cadastrar cliente.\n- **admin** — acesso a toda a empresa vinculada; empresa automática, unidade   ainda precisa ser escolhida.\n- **manager** — acesso a UMA unidade específica, nunca à empresa inteira   (reforçado por trigger no banco).\n- **attendant** — empresa inteira ou unidade(s) específica(s); automático se   vinculado a exatamente uma unidade.\n\nRequests de exemplo de erro (401/403/404/409/422/400) estão incluídos em cada pasta para documentar o comportamento completo da API, não só o caminho feliz.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{access_token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Gera um sufixo numerico unico (8 digitos) uma vez por execucao da",
+          "// colecao, usado em CNPJs/e-mails de teste para que a colecao possa",
+          "// ser rodada repetidas vezes sem colidir com dados de execucoes",
+          "// anteriores (unique constraints nao excluem linhas soft-deleted).",
+          "if (!pm.collectionVariables.get(\"run_suffix\")) {",
+          "    const suffix = Date.now().toString().slice(-8);",
+          "    pm.collectionVariables.set(\"run_suffix\", suffix);",
+          "}",
+          "if (!pm.collectionVariables.get(\"attendant_password\")) {",
+          "    pm.collectionVariables.set(\"attendant_password\", \"senha-super-segura-123\");",
+          "}"
+        ]
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8000",
+      "type": "string"
+    },
+    {
+      "key": "login_email",
+      "value": "admin@oticalab.com",
+      "type": "string"
+    },
+    {
+      "key": "login_password",
+      "value": "change-me",
+      "type": "string"
+    },
+    {
+      "key": "run_suffix",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "attendant_password",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "access_token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "attendant_access_token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "manager_access_token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "user_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "manager_user_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "deletable_user_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "company_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "unit_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "link_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "manager_link_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "customer_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "customer_id_2",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "appointment_id",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "description": "Endpoint de liveness, sem autenticação — usado por load balancers/orquestradores.",
+      "item": [
+        {
+          "name": "Health check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/health",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "health"
+              ]
+            },
+            "description": "Confirma que a API está no ar. Não requer autenticação.",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": [
+            {
+              "name": "200 example",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/health",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "health"
+                  ]
+                },
+                "description": "Confirma que a API está no ar. Não requer autenticação.",
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n    \"status\": \"ok\"\n}"
+            }
+          ],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Auth",
+      "description": "Autenticação. `POST /auth/login` é o único jeito de obter um token JWT — não existe auto-registro. O token é salvo automaticamente na variável de coleção `access_token` e reutilizado por todas as outras pastas.",
+      "item": [
+        {
+          "name": "Login",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/auth/login",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "auth",
+                "login"
+              ]
+            },
+            "description": "Autentica com e-mail/senha e devolve um token JWT (expira em 60 min). O primeiro usuário (`super_admin`) precisa ser inserido manualmente no banco — veja `db/migrations/README.md`. Preencha `login_email`/`login_password` nas variáveis de coleção antes de rodar.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"email\": \"{{login_email}}\",\n    \"password\": \"{{login_password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": [
+            {
+              "name": "200 example",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/auth/login",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "auth",
+                    "login"
+                  ]
+                },
+                "description": "Autentica com e-mail/senha e devolve um token JWT (expira em 60 min). O primeiro usuário (`super_admin`) precisa ser inserido manualmente no banco — veja `db/migrations/README.md`. Preencha `login_email`/`login_password` nas variáveis de coleção antes de rodar.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n    \"email\": \"{{login_email}}\",\n    \"password\": \"{{login_password}}\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n    \"access_token\": \"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...\",\n    \"token_type\": \"bearer\"\n}"
+            }
+          ],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Retornou access_token\", function () { pm.expect(pm.response.json()).to.have.property(\"access_token\"); });",
+                  "if (pm.response.code < 300) { const body = pm.response.json(); pm.collectionVariables.set(\"access_token\", body.access_token); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login - credenciais inválidas",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/auth/login",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "auth",
+                "login"
+              ]
+            },
+            "description": "Exemplo de falha de autenticação — 401 quando e-mail ou senha estão errados.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"email\": \"{{login_email}}\",\n    \"password\": \"senha-incorreta\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": [
+            {
+              "name": "401 example",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/auth/login",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "auth",
+                    "login"
+                  ]
+                },
+                "description": "Exemplo de falha de autenticação — 401 quando e-mail ou senha estão errados.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n    \"email\": \"{{login_email}}\",\n    \"password\": \"senha-incorreta\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "status": "OK",
+              "code": 401,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n    \"detail\": \"Invalid email or password\"\n}"
+            }
+          ],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 401\", function () { pm.response.to.have.status(401); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Users",
+      "description": "Usuários do sistema (quem opera, não quem é atendido). Criar/editar/excluir exige role `super_admin`. O vínculo com empresa/unidade fica em `company_users` (pasta Companies), não aqui. DELETE fica na pasta Cleanup, no fim da coleção.",
+      "item": [
+        {
+          "name": "Create user (attendant)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/users/",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "users"
+              ]
+            },
+            "description": "Cria um usuário com role `attendant` (default). A senha é hasheada com bcrypt — nunca armazenada nem retornada em texto plano. Exige `super_admin`.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"full_name\": \"Ana Silva\",\n    \"email\": \"ana.{{run_suffix}}@oticalab.com\",\n    \"password\": \"{{attendant_password}}\",\n    \"role\": \"attendant\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [
+            {
+              "name": "201 example",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/users/",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "users"
+                  ]
+                },
+                "description": "Cria um usuário com role `attendant` (default). A senha é hasheada com bcrypt — nunca armazenada nem retornada em texto plano. Exige `super_admin`.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n    \"full_name\": \"Ana Silva\",\n    \"email\": \"ana.{{run_suffix}}@oticalab.com\",\n    \"password\": \"{{attendant_password}}\",\n    \"role\": \"attendant\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "OK",
+              "code": 201,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n    \"id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n    \"full_name\": \"Ana Silva\",\n    \"email\": \"ana@oticalab.com\",\n    \"role\": \"attendant\",\n    \"created_at\": \"2026-01-01T12:00:00Z\",\n    \"updated_at\": \"2026-01-01T12:00:00Z\"\n}"
+            }
+          ],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 201\", function () { pm.response.to.have.status(201); });",
+                  "if (pm.response.code < 300) { const body = pm.response.json(); pm.collectionVariables.set(\"user_id\", body.id); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login as attendant (para demo 403)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/auth/login",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "auth",
+                "login"
+              ]
+            },
+            "description": "Faz login com o usuário attendant recém-criado, só para ter um token SEM privilégio de super_admin — usado no próximo request para provar que a API bloqueia mesmo quando o token é válido.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"email\": \"ana.{{run_suffix}}@oticalab.com\",\n    \"password\": \"{{attendant_password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": [
+            {
+              "name": "200 example",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/auth/login",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "auth",
+                    "login"
+                  ]
+                },
+                "description": "Faz login com o usuário attendant recém-criado, só para ter um token SEM privilégio de super_admin — usado no próximo request para provar que a API bloqueia mesmo quando o token é válido.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n    \"email\": \"ana.{{run_suffix}}@oticalab.com\",\n    \"password\": \"{{attendant_password}}\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n    \"access_token\": \"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...\",\n    \"token_type\": \"bearer\"\n}"
+            }
+          ],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () { pm.response.to.have.status(200); });",
+                  "if (pm.response.code < 300) { const body = pm.response.json(); pm.collectionVariables.set(\"attendant_access_token\", body.access_token); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create user (manager)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/users/",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "users"
+              ]
+            },
+            "description": "Cria um usuário com role `manager`. Managers precisam ser vinculados a uma unidade específica ao conceder acesso — nunca à empresa inteira (ver Companies > Access Grants > Grant access - manager).",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"full_name\": \"Carlos Mendes\",\n    \"email\": \"carlos.manager.{{run_suffix}}@oticalab.com\",\n    \"password\": \"senha-super-segura-123\",\n    \"role\": \"manager\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [
+            {
+              "name": "201 example",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/users/",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "users"
+                  ]
+                },
+                "description": "Cria um usuário com role `manager`. Managers precisam ser vinculados a uma unidade específica ao conceder acesso — nunca à empresa inteira (ver Companies > Access Grants > Grant access - manager).",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n    \"full_name\": \"Carlos Mendes\",\n    \"email\": \"carlos.manager.{{run_suffix}}@oticalab.com\",\n    \"password\": \"senha-super-segura-123\",\n    \"role\": \"manager\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "OK",
+              "code": 201,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n    \"id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n    \"full_name\": \"Ana Silva\",\n    \"email\": \"carlos.manager@oticalab.com\",\n    \"role\": \"manager\",\n    \"created_at\": \"2026-01-01T12:00:00Z\",\n    \"updated_at\": \"2026-01-01T12:00:00Z\"\n}"
+            }
+          ],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 201\", function () { pm.response.to.have.status(201); });",
+                  "if (pm.response.code < 300) { const body = pm.response.json(); pm.collectionVariables.set(\"manager_user_id\", body.id); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create user (para demo de exclusão)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/users/",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "users"
+              ]
+            },
+            "description": "Usuário descartável, criado só para demonstrar DELETE /users/{id} na pasta Cleanup, sem interferir nos usuários usados no resto da coleção.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"full_name\": \"Usuario Descartavel\",\n    \"email\": \"descartavel.{{run_suffix}}@oticalab.com\",\n    \"password\": \"senha-super-segura-123\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [
+            {
+              "name": "201 example",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/users/",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "users"
+                  ]
+                },
+                "description": "Usuário descartável, criado só para demonstrar DELETE /users/{id} na pasta Cleanup, sem interferir nos usuários usados no resto da coleção.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n    \"full_name\": \"Usuario Descartavel\",\n    \"email\": \"descartavel.{{run_suffix}}@oticalab.com\",\n    \"password\": \"senha-super-segura-123\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "OK",
+              "code": 201,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n    \"id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n    \"full_name\": \"Usuario Descartavel\",\n    \"email\": \"descartavel@oticalab.com\",\n    \"role\": \"attendant\",\n    \"created_at\": \"2026-01-01T12:00:00Z\",\n    \"updated_at\": \"2026-01-01T12:00:00Z\"\n}"
+            }
+          ],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 201\", function () { pm.response.to.have.status(201); });",
+                  "if (pm.response.code < 300) { const body = pm.response.json(); pm.collectionVariables.set(\"deletable_user_id\", body.id); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List users",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/users/?page=1&page_size=20",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "users"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "page_size",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "Lista usuários ativos, paginado. Qualquer usuário autenticado pode listar."
+          },
+          "response": [
+            {
+              "name": "200 example",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/users/?page=1&page_size=20",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "users"
+                  ],
+                  "query": [
+                    {
+                      "key": "page",
+                      "value": "1"
+                    },
+                    {
+                      "key": "page_size",
+                      "value": "20"
+                    }
+                  ]
+                },
+                "description": "Lista usuários ativos, paginado. Qualquer usuário autenticado pode listar."
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n    \"items\": [\n        {\n            \"id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n            \"full_name\": \"Ana Silva\",\n            \"email\": \"ana@oticalab.com\",\n            \"role\": \"attendant\",\n            \"created_at\": \"2026-01-01T12:00:00Z\",\n            \"updated_at\": \"2026-01-01T12:00:00Z\"\n        }\n    ],\n    \"page\": 1,\n    \"page_size\": 20,\n    \"total\": 1\n}"
+            }
+          ],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get user by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/users/{{user_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "users",
+                "{{user_id}}"
+              ]
+            },
+            "description": "Busca um usuário pelo UUID."
+          },
+          "response": [
+            {
+              "name": "200 example",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/users/{{user_id}}",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "users",
+                    "{{user_id}}"
+                  ]
+                },
+                "description": "Busca um usuário pelo UUID."
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n    \"id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n    \"full_name\": \"Ana Silva\",\n    \"email\": \"ana@oticalab.com\",\n    \"role\": \"attendant\",\n    \"created_at\": \"2026-01-01T12:00:00Z\",\n    \"updated_at\": \"2026-01-01T12:00:00Z\"\n}"
+            }
+          ],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update user",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/users/{{user_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "users",
+                "{{user_id}}"
+              ]
+            },
+            "description": "Atualiza campos do usuário (parcial). Exige `super_admin`. Não altera senha.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"full_name\": \"Ana Silva Santos\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [
+            {
+              "name": "200 example",
+              "originalRequest": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/users/{{user_id}}",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "users",
+                    "{{user_id}}"
+                  ]
+                },
+                "description": "Atualiza campos do usuário (parcial). Exige `super_admin`. Não altera senha.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n    \"full_name\": \"Ana Silva Santos\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n    \"id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n    \"full_name\": \"Ana Silva Santos\",\n    \"email\": \"ana@oticalab.com\",\n    \"role\": \"attendant\",\n    \"created_at\": \"2026-01-01T12:00:00Z\",\n    \"updated_at\": \"2026-01-01T12:00:00Z\"\n}"
+            }
+          ],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create user - sem permissão (403)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/users/",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "users"
+              ]
+            },
+            "description": "Exemplo de falha: autenticado como `attendant` (token de 'Login as attendant' acima), não `super_admin`.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"full_name\": \"Sem Permissao\",\n    \"email\": \"sem.permissao.{{run_suffix}}@oticalab.com\",\n    \"password\": \"senha-super-segura-123\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{attendant_access_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": [
+            {
+              "name": "403 example",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/users/",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "users"
+                  ]
+                },
+                "description": "Exemplo de falha: autenticado como `attendant` (token de 'Login as attendant' acima), não `super_admin`.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n    \"full_name\": \"Sem Permissao\",\n    \"email\": \"sem.permissao.{{run_suffix}}@oticalab.com\",\n    \"password\": \"senha-super-segura-123\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{attendant_access_token}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 403,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n    \"detail\": \"Requires role: super_admin\"\n}"
+            }
+          ],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 403\", function () { pm.response.to.have.status(403); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Companies",
+      "description": "Empresas, suas unidades e os vínculos de acesso (`company_users`). Criar/editar empresas e unidades exige `super_admin`. Conceder acesso exige `super_admin` ou `admin` vinculado à empresa inteira. DELETE/revoke ficam na pasta Cleanup.",
+      "item": [
+        {
+          "name": "Create company",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/companies/",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "companies"
+              ]
+            },
+            "description": "Cria uma nova empresa. Exige `super_admin`. CNPJ: 14 dígitos, só formato validado.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"name\": \"Ótica Nova Visão\",\n    \"cnpj\": \"900000{{run_suffix}}\",\n    \"state\": \"SP\",\n    \"city\": \"São Paulo\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [
+            {
+              "name": "201 example",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/companies/",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "companies"
+                  ]
+                },
+                "description": "Cria uma nova empresa. Exige `super_admin`. CNPJ: 14 dígitos, só formato validado.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n    \"name\": \"Ótica Nova Visão\",\n    \"cnpj\": \"900000{{run_suffix}}\",\n    \"state\": \"SP\",\n    \"city\": \"São Paulo\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "OK",
+              "code": 201,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n    \"id\": \"b1a2c3d4-0000-4000-8000-000000000001\",\n    \"name\": \"Ótica Nova Visão\",\n    \"cnpj\": \"12345678000199\",\n    \"state\": \"SP\",\n    \"city\": \"São Paulo\",\n    \"created_by_user_id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n    \"created_at\": \"2026-01-01T12:00:00Z\",\n    \"updated_at\": \"2026-01-01T12:00:00Z\"\n}"
+            }
+          ],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 201\", function () { pm.response.to.have.status(201); });",
+                  "if (pm.response.code < 300) { const body = pm.response.json(); pm.collectionVariables.set(\"company_id\", body.id); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List companies",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/companies/?page=1&page_size=20",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "companies"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "page_size",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "Lista empresas ativas, paginado. `super_admin` vê todas; outros roles veem só as empresas às quais têm vínculo em `company_users`."
+          },
+          "response": [
+            {
+              "name": "200 example",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/companies/?page=1&page_size=20",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "companies"
+                  ],
+                  "query": [
+                    {
+                      "key": "page",
+                      "value": "1"
+                    },
+                    {
+                      "key": "page_size",
+                      "value": "20"
+                    }
+                  ]
+                },
+                "description": "Lista empresas ativas, paginado. `super_admin` vê todas; outros roles veem só as empresas às quais têm vínculo em `company_users`."
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n    \"items\": [\n        {\n            \"id\": \"b1a2c3d4-0000-4000-8000-000000000001\",\n            \"name\": \"Ótica Nova Visão\",\n            \"cnpj\": \"12345678000199\",\n            \"state\": \"SP\",\n            \"city\": \"São Paulo\",\n            \"created_by_user_id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n            \"created_at\": \"2026-01-01T12:00:00Z\",\n            \"updated_at\": \"2026-01-01T12:00:00Z\"\n        }\n    ],\n    \"page\": 1,\n    \"page_size\": 20,\n    \"total\": 1\n}"
+            }
+          ],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get company by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/companies/{{company_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "companies",
+                "{{company_id}}"
+              ]
+            },
+            "description": "Busca uma empresa pelo UUID."
+          },
+          "response": [
+            {
+              "name": "200 example",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/companies/{{company_id}}",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "companies",
+                    "{{company_id}}"
+                  ]
+                },
+                "description": "Busca uma empresa pelo UUID."
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n    \"id\": \"b1a2c3d4-0000-4000-8000-000000000001\",\n    \"name\": \"Ótica Nova Visão\",\n    \"cnpj\": \"12345678000199\",\n    \"state\": \"SP\",\n    \"city\": \"São Paulo\",\n    \"created_by_user_id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n    \"created_at\": \"2026-01-01T12:00:00Z\",\n    \"updated_at\": \"2026-01-01T12:00:00Z\"\n}"
+            }
+          ],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update company",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/companies/{{company_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "companies",
+                "{{company_id}}"
+              ]
+            },
+            "description": "Atualiza campos da empresa (parcial). Exige `super_admin`.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"city\": \"Campinas\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [
+            {
+              "name": "200 example",
+              "originalRequest": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/companies/{{company_id}}",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "companies",
+                    "{{company_id}}"
+                  ]
+                },
+                "description": "Atualiza campos da empresa (parcial). Exige `super_admin`.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n    \"city\": \"Campinas\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n    \"id\": \"b1a2c3d4-0000-4000-8000-000000000001\",\n    \"name\": \"Ótica Nova Visão\",\n    \"cnpj\": \"12345678000199\",\n    \"state\": \"SP\",\n    \"city\": \"Campinas\",\n    \"created_by_user_id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n    \"created_at\": \"2026-01-01T12:00:00Z\",\n    \"updated_at\": \"2026-01-01T12:00:00Z\"\n}"
+            }
+          ],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create company - CNPJ duplicado (409)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/companies/",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "companies"
+              ]
+            },
+            "description": "Exemplo de falha: CNPJ já usado por outra empresa ativa.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"name\": \"Duplicada\",\n    \"cnpj\": \"900000{{run_suffix}}\",\n    \"state\": \"SP\",\n    \"city\": \"SP\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [
+            {
+              "name": "409 example",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/companies/",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "companies"
+                  ]
+                },
+                "description": "Exemplo de falha: CNPJ já usado por outra empresa ativa.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n    \"name\": \"Duplicada\",\n    \"cnpj\": \"900000{{run_suffix}}\",\n    \"state\": \"SP\",\n    \"city\": \"SP\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "OK",
+              "code": 409,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n    \"detail\": \"Resource already exists\"\n}"
+            }
+          ],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 409\", function () { pm.response.to.have.status(409); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create company unit",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/companies/{{company_id}}/units",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "companies",
+                "{{company_id}}",
+                "units"
+              ]
+            },
+            "description": "Cria uma unidade (filial) dentro da empresa. Exige `super_admin`. `code` é o identificador curto do dia a dia, único por empresa.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"name\": \"Unidade Argentina\",\n    \"code\": \"ARG\",\n    \"cnpj\": \"900001{{run_suffix}}\",\n    \"state\": \"SP\",\n    \"city\": \"São Paulo\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [
+            {
+              "name": "201 example",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/companies/{{company_id}}/units",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "companies",
+                    "{{company_id}}",
+                    "units"
+                  ]
+                },
+                "description": "Cria uma unidade (filial) dentro da empresa. Exige `super_admin`. `code` é o identificador curto do dia a dia, único por empresa.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n    \"name\": \"Unidade Argentina\",\n    \"code\": \"ARG\",\n    \"cnpj\": \"900001{{run_suffix}}\",\n    \"state\": \"SP\",\n    \"city\": \"São Paulo\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "OK",
+              "code": 201,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n    \"id\": \"c1a2c3d4-0000-4000-8000-000000000002\",\n    \"company_id\": \"b1a2c3d4-0000-4000-8000-000000000001\",\n    \"name\": \"Unidade Argentina\",\n    \"code\": \"ARG\",\n    \"cnpj\": \"12345678000280\",\n    \"state\": \"SP\",\n    \"city\": \"São Paulo\",\n    \"created_by_user_id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n    \"created_at\": \"2026-01-01T12:00:00Z\",\n    \"updated_at\": \"2026-01-01T12:00:00Z\"\n}"
+            }
+          ],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 201\", function () { pm.response.to.have.status(201); });",
+                  "if (pm.response.code < 300) { const body = pm.response.json(); pm.collectionVariables.set(\"unit_id\", body.id); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List company units",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/companies/{{company_id}}/units?page=1&page_size=20",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "companies",
+                "{{company_id}}",
+                "units"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "page_size",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "Lista as unidades ativas de uma empresa, paginado."
+          },
+          "response": [
+            {
+              "name": "200 example",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/companies/{{company_id}}/units?page=1&page_size=20",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "companies",
+                    "{{company_id}}",
+                    "units"
+                  ],
+                  "query": [
+                    {
+                      "key": "page",
+                      "value": "1"
+                    },
+                    {
+                      "key": "page_size",
+                      "value": "20"
+                    }
+                  ]
+                },
+                "description": "Lista as unidades ativas de uma empresa, paginado."
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n    \"items\": [\n        {\n            \"id\": \"c1a2c3d4-0000-4000-8000-000000000002\",\n            \"company_id\": \"b1a2c3d4-0000-4000-8000-000000000001\",\n            \"name\": \"Unidade Argentina\",\n            \"code\": \"ARG\",\n            \"cnpj\": \"12345678000280\",\n            \"state\": \"SP\",\n            \"city\": \"São Paulo\",\n            \"created_by_user_id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n            \"created_at\": \"2026-01-01T12:00:00Z\",\n            \"updated_at\": \"2026-01-01T12:00:00Z\"\n        }\n    ],\n    \"page\": 1,\n    \"page_size\": 20,\n    \"total\": 1\n}"
+            }
+          ],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get unit by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/companies/{{company_id}}/units/{{unit_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "companies",
+                "{{company_id}}",
+                "units",
+                "{{unit_id}}"
+              ]
+            },
+            "description": "Busca uma unidade pelo UUID."
+          },
+          "response": [
+            {
+              "name": "200 example",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/companies/{{company_id}}/units/{{unit_id}}",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "companies",
+                    "{{company_id}}",
+                    "units",
+                    "{{unit_id}}"
+                  ]
+                },
+                "description": "Busca uma unidade pelo UUID."
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n    \"id\": \"c1a2c3d4-0000-4000-8000-000000000002\",\n    \"company_id\": \"b1a2c3d4-0000-4000-8000-000000000001\",\n    \"name\": \"Unidade Argentina\",\n    \"code\": \"ARG\",\n    \"cnpj\": \"12345678000280\",\n    \"state\": \"SP\",\n    \"city\": \"São Paulo\",\n    \"created_by_user_id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n    \"created_at\": \"2026-01-01T12:00:00Z\",\n    \"updated_at\": \"2026-01-01T12:00:00Z\"\n}"
+            }
+          ],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update company unit",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/companies/{{company_id}}/units/{{unit_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "companies",
+                "{{company_id}}",
+                "units",
+                "{{unit_id}}"
+              ]
+            },
+            "description": "Atualiza campos da unidade (parcial). Exige `super_admin`.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"city\": \"Rio de Janeiro\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [
+            {
+              "name": "200 example",
+              "originalRequest": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/companies/{{company_id}}/units/{{unit_id}}",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "companies",
+                    "{{company_id}}",
+                    "units",
+                    "{{unit_id}}"
+                  ]
+                },
+                "description": "Atualiza campos da unidade (parcial). Exige `super_admin`.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n    \"city\": \"Rio de Janeiro\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n    \"id\": \"c1a2c3d4-0000-4000-8000-000000000002\",\n    \"company_id\": \"b1a2c3d4-0000-4000-8000-000000000001\",\n    \"name\": \"Unidade Argentina\",\n    \"code\": \"ARG\",\n    \"cnpj\": \"12345678000280\",\n    \"state\": \"SP\",\n    \"city\": \"Rio de Janeiro\",\n    \"created_by_user_id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n    \"created_at\": \"2026-01-01T12:00:00Z\",\n    \"updated_at\": \"2026-01-01T12:00:00Z\"\n}"
+            }
+          ],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Grant access - whole company (admin)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/companies/{{company_id}}/users",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "companies",
+                "{{company_id}}",
+                "users"
+              ]
+            },
+            "description": "Concede a um usuário acesso à empresa INTEIRA (unit_id omitido) — uso típico para conceder role `admin`. Requer `super_admin` ou `admin` já vinculado à empresa inteira.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"user_id\": \"{{user_id}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [
+            {
+              "name": "201 example",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/companies/{{company_id}}/users",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "companies",
+                    "{{company_id}}",
+                    "users"
+                  ]
+                },
+                "description": "Concede a um usuário acesso à empresa INTEIRA (unit_id omitido) — uso típico para conceder role `admin`. Requer `super_admin` ou `admin` já vinculado à empresa inteira.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n    \"user_id\": \"{{user_id}}\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "OK",
+              "code": 201,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n    \"id\": \"d1a2c3d4-0000-4000-8000-000000000003\",\n    \"company_id\": \"b1a2c3d4-0000-4000-8000-000000000001\",\n    \"user_id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n    \"unit_id\": null,\n    \"granted_by_user_id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n    \"created_at\": \"2026-01-01T12:00:00Z\"\n}"
+            }
+          ],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 201\", function () { pm.response.to.have.status(201); });",
+                  "if (pm.response.code < 300) { const body = pm.response.json(); pm.collectionVariables.set(\"link_id\", body.id); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Grant access - specific unit (manager/attendant)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/companies/{{company_id}}/users",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "companies",
+                "{{company_id}}",
+                "users"
+              ]
+            },
+            "description": "Concede acesso restrito a UMA unidade específica — uso típico para `manager` (obrigatório) ou `attendant` vinculado a uma unidade só.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"user_id\": \"{{manager_user_id}}\",\n    \"unit_id\": \"{{unit_id}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [
+            {
+              "name": "201 example",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/companies/{{company_id}}/users",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "companies",
+                    "{{company_id}}",
+                    "users"
+                  ]
+                },
+                "description": "Concede acesso restrito a UMA unidade específica — uso típico para `manager` (obrigatório) ou `attendant` vinculado a uma unidade só.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n    \"user_id\": \"{{manager_user_id}}\",\n    \"unit_id\": \"{{unit_id}}\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "OK",
+              "code": 201,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n    \"id\": \"d1a2c3d4-0000-4000-8000-000000000003\",\n    \"company_id\": \"b1a2c3d4-0000-4000-8000-000000000001\",\n    \"user_id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n    \"unit_id\": \"c1a2c3d4-0000-4000-8000-000000000002\",\n    \"granted_by_user_id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n    \"created_at\": \"2026-01-01T12:00:00Z\"\n}"
+            }
+          ],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 201\", function () { pm.response.to.have.status(201); });",
+                  "if (pm.response.code < 300) { const body = pm.response.json(); pm.collectionVariables.set(\"manager_link_id\", body.id); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login as manager (para demo de auto-preenchimento)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/auth/login",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "auth",
+                "login"
+              ]
+            },
+            "description": "Login com o manager recém-vinculado a uma única unidade específica. Usado na pasta Customers para demonstrar o auto-preenchimento de `company_id`/`company_unit_id` (ambos ficam implícitos quando o usuário só tem acesso a uma unidade).",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"email\": \"carlos.manager.{{run_suffix}}@oticalab.com\",\n    \"password\": \"senha-super-segura-123\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": [
+            {
+              "name": "200 example",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/auth/login",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "auth",
+                    "login"
+                  ]
+                },
+                "description": "Login com o manager recém-vinculado a uma única unidade específica. Usado na pasta Customers para demonstrar o auto-preenchimento de `company_id`/`company_unit_id` (ambos ficam implícitos quando o usuário só tem acesso a uma unidade).",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n    \"email\": \"carlos.manager.{{run_suffix}}@oticalab.com\",\n    \"password\": \"senha-super-segura-123\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n    \"access_token\": \"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...\",\n    \"token_type\": \"bearer\"\n}"
+            }
+          ],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () { pm.response.to.have.status(200); });",
+                  "if (pm.response.code < 300) { const body = pm.response.json(); pm.collectionVariables.set(\"manager_access_token\", body.access_token); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Grant access - manager without unit (400)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/companies/{{company_id}}/users",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "companies",
+                "{{company_id}}",
+                "users"
+              ]
+            },
+            "description": "Exemplo de falha: usuário com role `manager` precisa sempre de uma unidade específica — conceder acesso à empresa inteira (unit_id omitido) para um manager é rejeitado com 400, tanto pelo app quanto por um trigger no banco (`trg_company_users_manager_requires_unit`).",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"user_id\": \"{{manager_user_id}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [
+            {
+              "name": "400 example",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/companies/{{company_id}}/users",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "companies",
+                    "{{company_id}}",
+                    "users"
+                  ]
+                },
+                "description": "Exemplo de falha: usuário com role `manager` precisa sempre de uma unidade específica — conceder acesso à empresa inteira (unit_id omitido) para um manager é rejeitado com 400, tanto pelo app quanto por um trigger no banco (`trg_company_users_manager_requires_unit`).",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n    \"user_id\": \"{{manager_user_id}}\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "OK",
+              "code": 400,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n    \"detail\": \"User 3fa85f64-5717-4562-b3fc-2c963f66afa6 is a manager and must be linked to a specific unit\"\n}"
+            }
+          ],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 400\", function () { pm.response.to.have.status(400); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List access grants",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/companies/{{company_id}}/users?page=1&page_size=20",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "companies",
+                "{{company_id}}",
+                "users"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "page_size",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "Lista os vínculos de acesso ativos concedidos nesta empresa. Requer acesso de administrador."
+          },
+          "response": [
+            {
+              "name": "200 example",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/companies/{{company_id}}/users?page=1&page_size=20",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "companies",
+                    "{{company_id}}",
+                    "users"
+                  ],
+                  "query": [
+                    {
+                      "key": "page",
+                      "value": "1"
+                    },
+                    {
+                      "key": "page_size",
+                      "value": "20"
+                    }
+                  ]
+                },
+                "description": "Lista os vínculos de acesso ativos concedidos nesta empresa. Requer acesso de administrador."
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n    \"items\": [\n        {\n            \"id\": \"d1a2c3d4-0000-4000-8000-000000000003\",\n            \"company_id\": \"b1a2c3d4-0000-4000-8000-000000000001\",\n            \"user_id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n            \"unit_id\": null,\n            \"granted_by_user_id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n            \"created_at\": \"2026-01-01T12:00:00Z\"\n        }\n    ],\n    \"page\": 1,\n    \"page_size\": 20,\n    \"total\": 1\n}"
+            }
+          ],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Customers",
+      "description": "Clientes atendidos (pacientes), cadastrados numa empresa/unidade específicas. `company_id`/`company_unit_id` seguem a regra de auto-preenchimento por papel do usuário — veja a descrição da coleção e de `/docs`.",
+      "item": [
+        {
+          "name": "Create customer (super_admin, IDs explícitos)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/customers/",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "customers"
+              ]
+            },
+            "description": "Cadastra um cliente informando `company_id`/`company_unit_id` explicitamente — obrigatório quando o usuário autenticado é `super_admin`.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"full_name\": \"Bruno Souza\",\n    \"date_of_birth\": \"1990-05-20\",\n    \"phone\": \"11987654321\",\n    \"company_id\": \"{{company_id}}\",\n    \"company_unit_id\": \"{{unit_id}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [
+            {
+              "name": "201 example",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/customers/",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "customers"
+                  ]
+                },
+                "description": "Cadastra um cliente informando `company_id`/`company_unit_id` explicitamente — obrigatório quando o usuário autenticado é `super_admin`.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n    \"full_name\": \"Bruno Souza\",\n    \"date_of_birth\": \"1990-05-20\",\n    \"phone\": \"11987654321\",\n    \"company_id\": \"{{company_id}}\",\n    \"company_unit_id\": \"{{unit_id}}\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "OK",
+              "code": 201,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n    \"id\": \"e1a2c3d4-0000-4000-8000-000000000004\",\n    \"company_id\": \"b1a2c3d4-0000-4000-8000-000000000001\",\n    \"company_unit_id\": \"c1a2c3d4-0000-4000-8000-000000000002\",\n    \"full_name\": \"Bruno Souza\",\n    \"date_of_birth\": \"1990-05-20\",\n    \"phone\": \"11987654321\",\n    \"created_by_user_id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n    \"updated_by_user_id\": null,\n    \"created_at\": \"2026-01-01T12:00:00Z\",\n    \"updated_at\": \"2026-01-01T12:00:00Z\"\n}"
+            }
+          ],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 201\", function () { pm.response.to.have.status(201); });",
+                  "if (pm.response.code < 300) { const body = pm.response.json(); pm.collectionVariables.set(\"customer_id\", body.id); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create customer (auto-fill por vínculo)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/customers/",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "customers"
+              ]
+            },
+            "description": "Cadastra um cliente SEM informar empresa/unidade, autenticado como o `manager` (token de 'Login as manager' na pasta Companies) — como ele só tem acesso a UMA unidade específica, `company_id`/`company_unit_id` são deduzidos automaticamente do vínculo. `super_admin` nunca tem esse auto-preenchimento (deve sempre informar os dois explicitamente).",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"full_name\": \"Carla Mendes\",\n    \"date_of_birth\": \"1985-03-10\",\n    \"phone\": \"11912345678\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{manager_access_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": [
+            {
+              "name": "201 example",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/customers/",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "customers"
+                  ]
+                },
+                "description": "Cadastra um cliente SEM informar empresa/unidade, autenticado como o `manager` (token de 'Login as manager' na pasta Companies) — como ele só tem acesso a UMA unidade específica, `company_id`/`company_unit_id` são deduzidos automaticamente do vínculo. `super_admin` nunca tem esse auto-preenchimento (deve sempre informar os dois explicitamente).",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n    \"full_name\": \"Carla Mendes\",\n    \"date_of_birth\": \"1985-03-10\",\n    \"phone\": \"11912345678\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{manager_access_token}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 201,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n    \"id\": \"e1a2c3d4-0000-4000-8000-000000000004\",\n    \"company_id\": \"b1a2c3d4-0000-4000-8000-000000000001\",\n    \"company_unit_id\": \"c1a2c3d4-0000-4000-8000-000000000002\",\n    \"full_name\": \"Carla Mendes\",\n    \"date_of_birth\": \"1990-05-20\",\n    \"phone\": \"11987654321\",\n    \"created_by_user_id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n    \"updated_by_user_id\": null,\n    \"created_at\": \"2026-01-01T12:00:00Z\",\n    \"updated_at\": \"2026-01-01T12:00:00Z\"\n}"
+            }
+          ],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 201\", function () { pm.response.to.have.status(201); });",
+                  "if (pm.response.code < 300) { const body = pm.response.json(); pm.collectionVariables.set(\"customer_id_2\", body.id); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create customer - telefone inválido (422)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/customers/",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "customers"
+              ]
+            },
+            "description": "Exemplo de falha de validação: telefone fora do formato (10-11 dígitos, só números).",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"full_name\": \"Teste Invalido\",\n    \"date_of_birth\": \"1990-01-01\",\n    \"phone\": \"123\",\n    \"company_id\": \"{{company_id}}\",\n    \"company_unit_id\": \"{{unit_id}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [
+            {
+              "name": "422 example",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/customers/",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "customers"
+                  ]
+                },
+                "description": "Exemplo de falha de validação: telefone fora do formato (10-11 dígitos, só números).",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n    \"full_name\": \"Teste Invalido\",\n    \"date_of_birth\": \"1990-01-01\",\n    \"phone\": \"123\",\n    \"company_id\": \"{{company_id}}\",\n    \"company_unit_id\": \"{{unit_id}}\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "OK",
+              "code": 422,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": ""
+            }
+          ],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 422\", function () { pm.response.to.have.status(422); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List customers",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/customers/?page=1&page_size=20&company_id={{company_id}}&company_unit_id={{unit_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "customers"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "page_size",
+                  "value": "20"
+                },
+                {
+                  "key": "company_id",
+                  "value": "{{company_id}}",
+                  "disabled": true
+                },
+                {
+                  "key": "company_unit_id",
+                  "value": "{{unit_id}}",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "Lista clientes ativos, paginado. Filtros opcionais por `company_id`/`company_unit_id`."
+          },
+          "response": [
+            {
+              "name": "200 example",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/customers/?page=1&page_size=20&company_id={{company_id}}&company_unit_id={{unit_id}}",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "customers"
+                  ],
+                  "query": [
+                    {
+                      "key": "page",
+                      "value": "1"
+                    },
+                    {
+                      "key": "page_size",
+                      "value": "20"
+                    },
+                    {
+                      "key": "company_id",
+                      "value": "{{company_id}}",
+                      "disabled": true
+                    },
+                    {
+                      "key": "company_unit_id",
+                      "value": "{{unit_id}}",
+                      "disabled": true
+                    }
+                  ]
+                },
+                "description": "Lista clientes ativos, paginado. Filtros opcionais por `company_id`/`company_unit_id`."
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n    \"items\": [\n        {\n            \"id\": \"e1a2c3d4-0000-4000-8000-000000000004\",\n            \"company_id\": \"b1a2c3d4-0000-4000-8000-000000000001\",\n            \"company_unit_id\": \"c1a2c3d4-0000-4000-8000-000000000002\",\n            \"full_name\": \"Bruno Souza\",\n            \"date_of_birth\": \"1990-05-20\",\n            \"phone\": \"11987654321\",\n            \"created_by_user_id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n            \"updated_by_user_id\": null,\n            \"created_at\": \"2026-01-01T12:00:00Z\",\n            \"updated_at\": \"2026-01-01T12:00:00Z\"\n        }\n    ],\n    \"page\": 1,\n    \"page_size\": 20,\n    \"total\": 1\n}"
+            }
+          ],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get customer by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/customers/{{customer_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "customers",
+                "{{customer_id}}"
+              ]
+            },
+            "description": "Busca um cliente pelo UUID."
+          },
+          "response": [
+            {
+              "name": "200 example",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/customers/{{customer_id}}",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "customers",
+                    "{{customer_id}}"
+                  ]
+                },
+                "description": "Busca um cliente pelo UUID."
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n    \"id\": \"e1a2c3d4-0000-4000-8000-000000000004\",\n    \"company_id\": \"b1a2c3d4-0000-4000-8000-000000000001\",\n    \"company_unit_id\": \"c1a2c3d4-0000-4000-8000-000000000002\",\n    \"full_name\": \"Bruno Souza\",\n    \"date_of_birth\": \"1990-05-20\",\n    \"phone\": \"11987654321\",\n    \"created_by_user_id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n    \"updated_by_user_id\": null,\n    \"created_at\": \"2026-01-01T12:00:00Z\",\n    \"updated_at\": \"2026-01-01T12:00:00Z\"\n}"
+            }
+          ],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update customer",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/customers/{{customer_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "customers",
+                "{{customer_id}}"
+              ]
+            },
+            "description": "Atualiza campos do cliente (parcial). Empresa/unidade não podem ser alteradas por esta rota. `updated_by_user_id` vem do usuário autenticado.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"phone\": \"11999998888\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [
+            {
+              "name": "200 example",
+              "originalRequest": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/customers/{{customer_id}}",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "customers",
+                    "{{customer_id}}"
+                  ]
+                },
+                "description": "Atualiza campos do cliente (parcial). Empresa/unidade não podem ser alteradas por esta rota. `updated_by_user_id` vem do usuário autenticado.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n    \"phone\": \"11999998888\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n    \"id\": \"e1a2c3d4-0000-4000-8000-000000000004\",\n    \"company_id\": \"b1a2c3d4-0000-4000-8000-000000000001\",\n    \"company_unit_id\": \"c1a2c3d4-0000-4000-8000-000000000002\",\n    \"full_name\": \"Bruno Souza\",\n    \"date_of_birth\": \"1990-05-20\",\n    \"phone\": \"11999998888\",\n    \"created_by_user_id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n    \"updated_by_user_id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n    \"created_at\": \"2026-01-01T12:00:00Z\",\n    \"updated_at\": \"2026-01-01T12:00:00Z\"\n}"
+            }
+          ],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create customer - duplicado (409)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/customers/",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "customers"
+              ]
+            },
+            "description": "Exemplo de falha: mesmo nome + data de nascimento já cadastrado nesta empresa.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"full_name\": \"Bruno Souza\",\n    \"date_of_birth\": \"1990-05-20\",\n    \"company_id\": \"{{company_id}}\",\n    \"company_unit_id\": \"{{unit_id}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [
+            {
+              "name": "409 example",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/customers/",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "customers"
+                  ]
+                },
+                "description": "Exemplo de falha: mesmo nome + data de nascimento já cadastrado nesta empresa.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n    \"full_name\": \"Bruno Souza\",\n    \"date_of_birth\": \"1990-05-20\",\n    \"company_id\": \"{{company_id}}\",\n    \"company_unit_id\": \"{{unit_id}}\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "OK",
+              "code": 409,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n    \"detail\": \"Resource already exists\"\n}"
+            }
+          ],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 409\", function () { pm.response.to.have.status(409); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Appointments",
+      "description": "Agendamentos, escopados à empresa/unidade do cliente (herdada, não informada). Toda edição bem-sucedida grava uma linha imutável em `appointment_history`, na mesma transação do UPDATE (função RPC no Postgres).",
+      "item": [
+        {
+          "name": "Create appointment",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/appointments/",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "appointments"
+              ]
+            },
+            "description": "Cria um agendamento para um cliente. Status inicial sempre `scheduled`. `created_by_user_id` vem do usuário autenticado.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"customer_id\": \"{{customer_id}}\",\n    \"scheduled_at\": \"2026-06-15T14:30:00Z\",\n    \"notes\": \"Primeira consulta\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [
+            {
+              "name": "201 example",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/appointments/",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "appointments"
+                  ]
+                },
+                "description": "Cria um agendamento para um cliente. Status inicial sempre `scheduled`. `created_by_user_id` vem do usuário autenticado.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n    \"customer_id\": \"{{customer_id}}\",\n    \"scheduled_at\": \"2026-06-15T14:30:00Z\",\n    \"notes\": \"Primeira consulta\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "OK",
+              "code": 201,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n    \"id\": \"f1a2c3d4-0000-4000-8000-000000000005\",\n    \"customer_id\": \"e1a2c3d4-0000-4000-8000-000000000004\",\n    \"created_by_user_id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n    \"updated_by_user_id\": null,\n    \"scheduled_at\": \"2026-06-15T14:30:00Z\",\n    \"status\": \"scheduled\",\n    \"notes\": \"Primeira consulta\",\n    \"created_at\": \"2026-01-01T12:00:00Z\",\n    \"updated_at\": \"2026-01-01T12:00:00Z\"\n}"
+            }
+          ],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 201\", function () { pm.response.to.have.status(201); });",
+                  "if (pm.response.code < 300) { const body = pm.response.json(); pm.collectionVariables.set(\"appointment_id\", body.id); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create appointment - horário duplicado (409)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/appointments/",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "appointments"
+              ]
+            },
+            "description": "Exemplo de falha: mesmo cliente já tem um agendamento ativo nesse exato horário.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"customer_id\": \"{{customer_id}}\",\n    \"scheduled_at\": \"2026-06-15T14:30:00Z\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [
+            {
+              "name": "409 example",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/appointments/",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "appointments"
+                  ]
+                },
+                "description": "Exemplo de falha: mesmo cliente já tem um agendamento ativo nesse exato horário.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n    \"customer_id\": \"{{customer_id}}\",\n    \"scheduled_at\": \"2026-06-15T14:30:00Z\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "OK",
+              "code": 409,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n    \"detail\": \"Resource already exists\"\n}"
+            }
+          ],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 409\", function () { pm.response.to.have.status(409); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List appointments",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/appointments/?page=1&page_size=20&customer_id={{customer_id}}&status=scheduled",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "appointments"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "page_size",
+                  "value": "20"
+                },
+                {
+                  "key": "customer_id",
+                  "value": "{{customer_id}}",
+                  "disabled": true
+                },
+                {
+                  "key": "status",
+                  "value": "scheduled",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "Lista agendamentos ativos, ordenados por `scheduled_at`. Filtros opcionais por `customer_id`/`status`."
+          },
+          "response": [
+            {
+              "name": "200 example",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/appointments/?page=1&page_size=20&customer_id={{customer_id}}&status=scheduled",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "appointments"
+                  ],
+                  "query": [
+                    {
+                      "key": "page",
+                      "value": "1"
+                    },
+                    {
+                      "key": "page_size",
+                      "value": "20"
+                    },
+                    {
+                      "key": "customer_id",
+                      "value": "{{customer_id}}",
+                      "disabled": true
+                    },
+                    {
+                      "key": "status",
+                      "value": "scheduled",
+                      "disabled": true
+                    }
+                  ]
+                },
+                "description": "Lista agendamentos ativos, ordenados por `scheduled_at`. Filtros opcionais por `customer_id`/`status`."
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n    \"items\": [\n        {\n            \"id\": \"f1a2c3d4-0000-4000-8000-000000000005\",\n            \"customer_id\": \"e1a2c3d4-0000-4000-8000-000000000004\",\n            \"created_by_user_id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n            \"updated_by_user_id\": null,\n            \"scheduled_at\": \"2026-06-15T14:30:00Z\",\n            \"status\": \"scheduled\",\n            \"notes\": null,\n            \"created_at\": \"2026-01-01T12:00:00Z\",\n            \"updated_at\": \"2026-01-01T12:00:00Z\"\n        }\n    ],\n    \"page\": 1,\n    \"page_size\": 20,\n    \"total\": 1\n}"
+            }
+          ],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get appointment by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/appointments/{{appointment_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "appointments",
+                "{{appointment_id}}"
+              ]
+            },
+            "description": "Busca um agendamento pelo UUID."
+          },
+          "response": [
+            {
+              "name": "200 example",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/appointments/{{appointment_id}}",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "appointments",
+                    "{{appointment_id}}"
+                  ]
+                },
+                "description": "Busca um agendamento pelo UUID."
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n    \"id\": \"f1a2c3d4-0000-4000-8000-000000000005\",\n    \"customer_id\": \"e1a2c3d4-0000-4000-8000-000000000004\",\n    \"created_by_user_id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n    \"updated_by_user_id\": null,\n    \"scheduled_at\": \"2026-06-15T14:30:00Z\",\n    \"status\": \"scheduled\",\n    \"notes\": null,\n    \"created_at\": \"2026-01-01T12:00:00Z\",\n    \"updated_at\": \"2026-01-01T12:00:00Z\"\n}"
+            }
+          ],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update appointment (confirm)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/appointments/{{appointment_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "appointments",
+                "{{appointment_id}}"
+              ]
+            },
+            "description": "Atualiza o status para `confirmed`. Grava automaticamente uma linha em `appointment_history` registrando `scheduled -> confirmed`.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"status\": \"confirmed\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [
+            {
+              "name": "200 example",
+              "originalRequest": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/appointments/{{appointment_id}}",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "appointments",
+                    "{{appointment_id}}"
+                  ]
+                },
+                "description": "Atualiza o status para `confirmed`. Grava automaticamente uma linha em `appointment_history` registrando `scheduled -> confirmed`.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n    \"status\": \"confirmed\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n    \"id\": \"f1a2c3d4-0000-4000-8000-000000000005\",\n    \"customer_id\": \"e1a2c3d4-0000-4000-8000-000000000004\",\n    \"created_by_user_id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n    \"updated_by_user_id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n    \"scheduled_at\": \"2026-06-15T14:30:00Z\",\n    \"status\": \"confirmed\",\n    \"notes\": null,\n    \"created_at\": \"2026-01-01T12:00:00Z\",\n    \"updated_at\": \"2026-01-01T12:00:00Z\"\n}"
+            }
+          ],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get appointment history",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/appointments/{{appointment_id}}/history?page=1&page_size=20",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "appointments",
+                "{{appointment_id}}",
+                "history"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "page_size",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "Lista o histórico de alterações do agendamento, do mais recente para o mais antigo. Somente leitura — a tabela é imutável (trigger bloqueia UPDATE/DELETE mesmo para superusuário do Postgres)."
+          },
+          "response": [
+            {
+              "name": "200 example",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/appointments/{{appointment_id}}/history?page=1&page_size=20",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "appointments",
+                    "{{appointment_id}}",
+                    "history"
+                  ],
+                  "query": [
+                    {
+                      "key": "page",
+                      "value": "1"
+                    },
+                    {
+                      "key": "page_size",
+                      "value": "20"
+                    }
+                  ]
+                },
+                "description": "Lista o histórico de alterações do agendamento, do mais recente para o mais antigo. Somente leitura — a tabela é imutável (trigger bloqueia UPDATE/DELETE mesmo para superusuário do Postgres)."
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n    \"items\": [\n        {\n            \"id\": \"a1a2c3d4-0000-4000-8000-000000000006\",\n            \"appointment_id\": \"f1a2c3d4-0000-4000-8000-000000000005\",\n            \"changed_by_user_id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n            \"previous_scheduled_at\": \"2026-06-15T14:30:00Z\",\n            \"new_scheduled_at\": \"2026-06-15T14:30:00Z\",\n            \"previous_status\": \"scheduled\",\n            \"new_status\": \"confirmed\",\n            \"previous_notes\": null,\n            \"new_notes\": null,\n            \"changed_at\": \"2026-01-02T09:00:00Z\"\n        }\n    ],\n    \"page\": 1,\n    \"page_size\": 20,\n    \"total\": 1\n}"
+            }
+          ],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update appointment (reschedule + notes)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/appointments/{{appointment_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "appointments",
+                "{{appointment_id}}"
+              ]
+            },
+            "description": "Reagenda o horário e adiciona observações — mais uma linha de histórico é gravada.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"scheduled_at\": \"2026-06-20T10:00:00Z\",\n    \"notes\": \"Reagendado a pedido do cliente\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [
+            {
+              "name": "200 example",
+              "originalRequest": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/appointments/{{appointment_id}}",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "appointments",
+                    "{{appointment_id}}"
+                  ]
+                },
+                "description": "Reagenda o horário e adiciona observações — mais uma linha de histórico é gravada.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n    \"scheduled_at\": \"2026-06-20T10:00:00Z\",\n    \"notes\": \"Reagendado a pedido do cliente\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n    \"id\": \"f1a2c3d4-0000-4000-8000-000000000005\",\n    \"customer_id\": \"e1a2c3d4-0000-4000-8000-000000000004\",\n    \"created_by_user_id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n    \"updated_by_user_id\": null,\n    \"scheduled_at\": \"2026-06-20T10:00:00Z\",\n    \"status\": \"confirmed\",\n    \"notes\": \"Reagendado a pedido do cliente\",\n    \"created_at\": \"2026-01-01T12:00:00Z\",\n    \"updated_at\": \"2026-01-01T12:00:00Z\"\n}"
+            }
+          ],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Cleanup",
+      "description": "Reverte tudo que as pastas anteriores criaram (soft delete), na ordem certa de dependência — deixa a coleção pronta pra rodar de novo do zero, e documenta todos os endpoints DELETE que ainda não apareceram (agendamento, cliente, vínculos de acesso, unidade, empresa, usuários). Rode por último, depois de todas as outras pastas.",
+      "item": [
+        {
+          "name": "Delete appointment",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/appointments/{{appointment_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "appointments",
+                "{{appointment_id}}"
+              ]
+            },
+            "description": "Remove o agendamento de teste (soft delete) — reservado para erro de cadastro/duplicata. Para cancelar de verdade, prefira PUT com status `cancelled` (mantém visível e gera histórico)."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 204\", function () { pm.response.to.have.status(204); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete customer",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/customers/{{customer_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "customers",
+                "{{customer_id}}"
+              ]
+            },
+            "description": "Remove o cliente de teste (soft delete)."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 204\", function () { pm.response.to.have.status(204); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete customer (auto-fill demo)",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/customers/{{customer_id_2}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "customers",
+                "{{customer_id_2}}"
+              ]
+            },
+            "description": "Remove o segundo cliente de teste (criado via auto-preenchimento pelo manager)."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 204\", function () { pm.response.to.have.status(204); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Revoke access - whole company grant",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/companies/{{company_id}}/users/{{link_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "companies",
+                "{{company_id}}",
+                "users",
+                "{{link_id}}"
+              ]
+            },
+            "description": "Revoga o vínculo de acesso à empresa inteira concedido na pasta Companies."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 204\", function () { pm.response.to.have.status(204); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Revoke access - unit grant",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/companies/{{company_id}}/users/{{manager_link_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "companies",
+                "{{company_id}}",
+                "users",
+                "{{manager_link_id}}"
+              ]
+            },
+            "description": "Revoga o vínculo de acesso à unidade específica concedido na pasta Companies."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 204\", function () { pm.response.to.have.status(204); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete company unit",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/companies/{{company_id}}/units/{{unit_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "companies",
+                "{{company_id}}",
+                "units",
+                "{{unit_id}}"
+              ]
+            },
+            "description": "Remove a unidade de teste (soft delete). Exige `super_admin`."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 204\", function () { pm.response.to.have.status(204); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete company",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/companies/{{company_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "companies",
+                "{{company_id}}"
+              ]
+            },
+            "description": "Remove a empresa de teste (soft delete). Exige `super_admin`. Não afeta em cascata unidades/clientes/agendamentos — por isso a ordem desta pasta importa: eles já foram removidos acima."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 204\", function () { pm.response.to.have.status(204); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete user (attendant)",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/users/{{user_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "users",
+                "{{user_id}}"
+              ]
+            },
+            "description": "Remove o usuário attendant de teste (soft delete). Exige `super_admin`."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 204\", function () { pm.response.to.have.status(204); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete user (manager)",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/users/{{manager_user_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "users",
+                "{{manager_user_id}}"
+              ]
+            },
+            "description": "Remove o usuário manager de teste (soft delete). Exige `super_admin`."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 204\", function () { pm.response.to.have.status(204); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete user (descartável)",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/users/{{deletable_user_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "users",
+                "{{deletable_user_id}}"
+              ]
+            },
+            "description": "Remove o usuário criado só para essa demonstração (soft delete). Exige `super_admin`."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 204\", function () { pm.response.to.have.status(204); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Query, status
+from fastapi import APIRouter, Path, Query, status
 
 from app.customers.dependencies import CustomerServiceDep
 from app.customers.model import Customer
@@ -11,40 +11,120 @@ from app.users.dependencies import CurrentUser
 router = APIRouter(prefix="/customers", tags=["customers"])
 
 
-@router.post("/", response_model=CustomerResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/",
+    response_model=CustomerResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Cadastrar cliente",
+    responses={
+        400: {
+            "description": (
+                "`company_id`/`company_unit_id` não informados e não puderam ser "
+                "deduzidos automaticamente a partir do papel/vínculos do usuário."
+            )
+        },
+        401: {"description": "Token ausente ou inválido."},
+        403: {"description": "Usuário não tem acesso à empresa/unidade informada."},
+        404: {"description": "Empresa ou unidade informada não encontrada."},
+        409: {
+            "description": "Já existe um cliente ativo com esse nome + nascimento nesta empresa."
+        },
+        422: {"description": "Dados inválidos (ex: telefone fora do formato)."},
+    },
+)
 async def create_customer(
     data: CustomerCreate, service: CustomerServiceDep, current_user: CurrentUser
 ) -> Customer:
+    """
+    Cadastra um novo cliente.
+
+    `company_id`/`company_unit_id` seguem a regra de auto-preenchimento
+    por papel do usuário autenticado — veja a descrição da API em `/docs`.
+    `created_by_user_id` vem sempre do usuário autenticado, nunca do corpo
+    da requisição.
+    """
     return await service.create(data, current_user)
 
 
-@router.get("/", response_model=Page[CustomerResponse])
+@router.get(
+    "/",
+    response_model=Page[CustomerResponse],
+    summary="Listar clientes",
+    responses={401: {"description": "Token ausente ou inválido."}},
+)
 async def list_customers(
     service: CustomerServiceDep,
-    page: Annotated[int, Query(ge=1)] = 1,
-    page_size: Annotated[int, Query(ge=1, le=100)] = 20,
-    company_id: Annotated[str | None, Query()] = None,
-    company_unit_id: Annotated[str | None, Query()] = None,
+    page: Annotated[int, Query(ge=1, description="Número da página, começando em 1.")] = 1,
+    page_size: Annotated[int, Query(ge=1, le=100, description="Itens por página (máx. 100).")] = 20,
+    company_id: Annotated[str | None, Query(description="Filtra por UUID da empresa.")] = None,
+    company_unit_id: Annotated[str | None, Query(description="Filtra por UUID da unidade.")] = None,
 ) -> Page[Customer]:
+    """
+    Lista clientes ativos, paginado. Filtros opcionais por empresa e/ou
+    unidade (não há escopo automático por usuário nesta listagem — use
+    os filtros para restringir).
+    """
     return await service.get_all(
         page=page, page_size=page_size, company_id=company_id, company_unit_id=company_unit_id
     )
 
 
-@router.get("/{customer_id}", response_model=CustomerResponse)
-async def get_customer(customer_id: str, service: CustomerServiceDep) -> Customer:
+@router.get(
+    "/{customer_id}",
+    response_model=CustomerResponse,
+    summary="Buscar cliente por ID",
+    responses={
+        401: {"description": "Token ausente ou inválido."},
+        404: {"description": "Cliente não encontrado (ou soft-deletado)."},
+    },
+)
+async def get_customer(
+    customer_id: Annotated[str, Path(description="UUID do cliente.")], service: CustomerServiceDep
+) -> Customer:
+    """Busca um cliente pelo UUID."""
     return await service.get_by_id(customer_id)
 
 
-@router.put("/{customer_id}", response_model=CustomerResponse)
+@router.put(
+    "/{customer_id}",
+    response_model=CustomerResponse,
+    summary="Atualizar cliente",
+    responses={
+        401: {"description": "Token ausente ou inválido."},
+        403: {"description": "Usuário não tem acesso à unidade deste cliente."},
+        404: {"description": "Cliente não encontrado (ou soft-deletado)."},
+        409: {
+            "description": "Novo nome + nascimento já pertence a outro cliente ativo nesta empresa."
+        },
+    },
+)
 async def update_customer(
-    customer_id: str, data: CustomerUpdate, service: CustomerServiceDep, current_user: CurrentUser
+    customer_id: Annotated[str, Path(description="UUID do cliente.")],
+    data: CustomerUpdate,
+    service: CustomerServiceDep,
+    current_user: CurrentUser,
 ) -> Customer:
+    """
+    Atualiza campos de um cliente (parcial). Empresa/unidade do cliente
+    não podem ser alteradas por esta rota. `updated_by_user_id` vem do
+    usuário autenticado.
+    """
     return await service.update(customer_id, data, current_user)
 
 
-@router.delete("/{customer_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{customer_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Excluir cliente",
+    responses={
+        401: {"description": "Token ausente ou inválido."},
+        404: {"description": "Cliente não encontrado (ou já soft-deletado)."},
+    },
+)
 async def delete_customer(
-    customer_id: str, service: CustomerServiceDep, _current_user: CurrentUser
+    customer_id: Annotated[str, Path(description="UUID do cliente.")],
+    service: CustomerServiceDep,
+    _current_user: CurrentUser,
 ) -> None:
+    """Remove um cliente (soft delete). Agendamentos existentes não são afetados."""
     await service.delete(customer_id)

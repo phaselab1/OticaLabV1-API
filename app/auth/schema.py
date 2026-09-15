@@ -1,11 +1,15 @@
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 
 
 class LoginRequest(BaseModel):
-    email: EmailStr
-    password: str
+    email: EmailStr = Field(
+        description="E-mail cadastrado do usuário.", examples=["admin@oticalab.com"]
+    )
+    password: str = Field(
+        description="Senha em texto plano — nunca armazenada, só usada para verificação."
+    )
 
 
 class TokenResponse(BaseModel):
-    access_token: str
-    token_type: str = "bearer"
+    access_token: str = Field(description="Token JWT — envie em `Authorization: Bearer <token>`.")
+    token_type: str = Field(default="bearer", description="Sempre `bearer`.")

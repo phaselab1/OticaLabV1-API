@@ -176,6 +176,7 @@ def service(
         FakeCompanyUserRepository([link]),  # type: ignore[arg-type]
         None,  # type: ignore[arg-type]
         None,  # type: ignore[arg-type]
+        None,  # type: ignore[arg-type]
     )
     return AppointmentService(
         appointment_repository,  # type: ignore[arg-type]
@@ -228,6 +229,7 @@ async def test_create_appointment_without_unit_access_forbidden(
     )
     company_user_service = CompanyUserService(
         FakeCompanyUserRepository([]),  # type: ignore[arg-type]
+        None,  # type: ignore[arg-type]
         None,  # type: ignore[arg-type]
         None,  # type: ignore[arg-type]
     )

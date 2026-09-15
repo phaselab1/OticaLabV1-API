@@ -8,6 +8,7 @@ from app.companies.exceptions import (
     CompanyNotFoundError,
     CompanyUnitNotFoundError,
     CompanyUserLinkNotFoundError,
+    ManagerRequiresUnitError,
 )
 from app.companies.model import Company, CompanyUnit, CompanyUserLink
 from app.companies.schema import CompanyCreate, CompanyUnitCreate, CompanyUserGrant
@@ -152,6 +153,14 @@ class FakeCompanyUserRepository:
         return True
 
 
+class FakeUserRepository:
+    def __init__(self, users: list[User] | None = None) -> None:
+        self.users = {u.id: u for u in (users or [])}
+
+    async def get_by_id(self, user_id: str) -> User | None:
+        return self.users.get(user_id)
+
+
 def _user(role: UserRole, user_id: str = "user-1") -> User:
     now = datetime.now(UTC)
     return User(
@@ -268,7 +277,12 @@ async def test_grant_access_requires_company_admin_access() -> None:
 
     attendant = _user(UserRole.ATTENDANT, user_id="attendant-1")
     company_user_repo = FakeCompanyUserRepository([_link(attendant.id, company.id, "unit-1")])
-    service = CompanyUserService(company_user_repo, company_repo, FakeCompanyUnitRepository())  # type: ignore[arg-type]
+    service = CompanyUserService(
+        company_user_repo,  # type: ignore[arg-type]
+        company_repo,  # type: ignore[arg-type]
+        FakeCompanyUnitRepository(),  # type: ignore[arg-type]
+        FakeUserRepository([_user(UserRole.ATTENDANT, user_id="new-user")]),  # type: ignore[arg-type]
+    )
 
     with pytest.raises(ForbiddenError):
         await service.grant(company.id, CompanyUserGrant(user_id="new-user"), attendant)
@@ -282,8 +296,11 @@ async def test_super_admin_can_grant_access() -> None:
     )
 
     service = CompanyUserService(
-        FakeCompanyUserRepository(), company_repo, FakeCompanyUnitRepository()
-    )  # type: ignore[arg-type]
+        FakeCompanyUserRepository(),  # type: ignore[arg-type]
+        company_repo,  # type: ignore[arg-type]
+        FakeCompanyUnitRepository(),  # type: ignore[arg-type]
+        FakeUserRepository([_user(UserRole.ATTENDANT, user_id="new-user")]),  # type: ignore[arg-type]
+    )
 
     link = await service.grant(company.id, CompanyUserGrant(user_id="new-user"), super_admin)
 
@@ -299,7 +316,12 @@ async def test_revoke_by_outsider_forbidden() -> None:
         CompanyCreate(name="A", cnpj="11111111000100", state="SP", city="X"), super_admin
     )
     grant_repo = FakeCompanyUserRepository()
-    grant_service = CompanyUserService(grant_repo, company_repo, FakeCompanyUnitRepository())  # type: ignore[arg-type]
+    grant_service = CompanyUserService(
+        grant_repo,  # type: ignore[arg-type]
+        company_repo,  # type: ignore[arg-type]
+        FakeCompanyUnitRepository(),  # type: ignore[arg-type]
+        FakeUserRepository([_user(UserRole.ATTENDANT, user_id="new-user")]),  # type: ignore[arg-type]
+    )
     link = await grant_service.grant(company.id, CompanyUserGrant(user_id="new-user"), super_admin)
 
     outsider = _user(UserRole.ATTENDANT, user_id="outsider-1")
@@ -309,9 +331,10 @@ async def test_revoke_by_outsider_forbidden() -> None:
 
 async def test_revoke_missing_link_raises_not_found() -> None:
     service = CompanyUserService(
-        FakeCompanyUserRepository(),
-        FakeCompanyRepository(),
+        FakeCompanyUserRepository(),  # type: ignore[arg-type]
+        FakeCompanyRepository(),  # type: ignore[arg-type]
         FakeCompanyUnitRepository(),  # type: ignore[arg-type]
+        FakeUserRepository(),  # type: ignore[arg-type]
     )
     super_admin = _user(UserRole.SUPER_ADMIN)
 
@@ -326,10 +349,56 @@ async def test_grant_unknown_unit_raises_not_found() -> None:
         CompanyCreate(name="A", cnpj="11111111000100", state="SP", city="X"), super_admin
     )
     service = CompanyUserService(
-        FakeCompanyUserRepository(), company_repo, FakeCompanyUnitRepository()
-    )  # type: ignore[arg-type]
+        FakeCompanyUserRepository(),  # type: ignore[arg-type]
+        company_repo,  # type: ignore[arg-type]
+        FakeCompanyUnitRepository(),  # type: ignore[arg-type]
+        FakeUserRepository([_user(UserRole.ATTENDANT, user_id="new-user")]),  # type: ignore[arg-type]
+    )
 
     with pytest.raises(CompanyUnitNotFoundError):
         await service.grant(
             company.id, CompanyUserGrant(user_id="new-user", unit_id="missing-unit"), super_admin
         )
+
+
+async def test_grant_manager_without_unit_raises() -> None:
+    company_repo = FakeCompanyRepository()
+    super_admin = _user(UserRole.SUPER_ADMIN)
+    company = await CompanyService(company_repo, FakeCompanyUserRepository()).create(  # type: ignore[arg-type]
+        CompanyCreate(name="A", cnpj="11111111000100", state="SP", city="X"), super_admin
+    )
+    service = CompanyUserService(
+        FakeCompanyUserRepository(),  # type: ignore[arg-type]
+        company_repo,  # type: ignore[arg-type]
+        FakeCompanyUnitRepository(),  # type: ignore[arg-type]
+        FakeUserRepository([_user(UserRole.MANAGER, user_id="manager-1")]),  # type: ignore[arg-type]
+    )
+
+    with pytest.raises(ManagerRequiresUnitError):
+        await service.grant(company.id, CompanyUserGrant(user_id="manager-1"), super_admin)
+
+
+async def test_grant_manager_with_unit_succeeds() -> None:
+    company_repo = FakeCompanyRepository()
+    unit_repo = FakeCompanyUnitRepository()
+    super_admin = _user(UserRole.SUPER_ADMIN)
+    company = await CompanyService(company_repo, FakeCompanyUserRepository()).create(  # type: ignore[arg-type]
+        CompanyCreate(name="A", cnpj="11111111000100", state="SP", city="X"), super_admin
+    )
+    unit = await CompanyUnitService(unit_repo, company_repo).create(  # type: ignore[arg-type]
+        company.id,
+        CompanyUnitCreate(name="ARG", code="ARG", cnpj="11111111000200", state="SP", city="X"),
+        super_admin,
+    )
+    service = CompanyUserService(
+        FakeCompanyUserRepository(),  # type: ignore[arg-type]
+        company_repo,  # type: ignore[arg-type]
+        unit_repo,  # type: ignore[arg-type]
+        FakeUserRepository([_user(UserRole.MANAGER, user_id="manager-1")]),  # type: ignore[arg-type]
+    )
+
+    link = await service.grant(
+        company.id, CompanyUserGrant(user_id="manager-1", unit_id=unit.id), super_admin
+    )
+
+    assert link.unit_id == unit.id

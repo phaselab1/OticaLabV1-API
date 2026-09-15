@@ -35,6 +35,11 @@ class CompanyOrUnitRequiredError(Exception):
     pass
 
 
+class ManagerRequiresUnitError(Exception):
+    def __init__(self, user_id: str) -> None:
+        super().__init__(f"User {user_id} is a manager and must be linked to a specific unit")
+
+
 def register_company_exception_handlers(app: FastAPI) -> None:
     @app.exception_handler(CompanyNotFoundError)
     async def company_not_found_handler(
@@ -75,5 +80,11 @@ def register_company_exception_handlers(app: FastAPI) -> None:
     @app.exception_handler(CompanyOrUnitRequiredError)
     async def company_or_unit_required_handler(
         request: Request, exc: CompanyOrUnitRequiredError
+    ) -> JSONResponse:
+        return JSONResponse(status_code=400, content={"detail": str(exc)})
+
+    @app.exception_handler(ManagerRequiresUnitError)
+    async def manager_requires_unit_handler(
+        request: Request, exc: ManagerRequiresUnitError
     ) -> JSONResponse:
         return JSONResponse(status_code=400, content={"detail": str(exc)})

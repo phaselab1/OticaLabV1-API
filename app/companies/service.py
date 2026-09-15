@@ -3,6 +3,7 @@ from app.companies.exceptions import (
     CompanyOrUnitRequiredError,
     CompanyUnitNotFoundError,
     CompanyUserLinkNotFoundError,
+    ManagerRequiresUnitError,
 )
 from app.companies.model import Company, CompanyUnit, CompanyUserLink
 from app.companies.repository import CompanyRepository, CompanyUnitRepository, CompanyUserRepository
@@ -15,7 +16,9 @@ from app.companies.schema import (
 )
 from app.core.exceptions import ForbiddenError
 from app.shared.pagination import Page
+from app.users.exceptions import UserNotFoundError
 from app.users.model import User, UserRole
+from app.users.repository import UserRepository
 
 
 class CompanyService:
@@ -110,10 +113,12 @@ class CompanyUserService:
         repository: CompanyUserRepository,
         company_repository: CompanyRepository,
         unit_repository: CompanyUnitRepository,
+        user_repository: UserRepository,
     ) -> None:
         self.repository = repository
         self.company_repository = company_repository
         self.unit_repository = unit_repository
+        self.user_repository = user_repository
 
     async def grant(
         self, company_id: str, data: CompanyUserGrant, current_user: User
@@ -124,6 +129,13 @@ class CompanyUserService:
         company = await self.company_repository.get_by_id(company_id)
         if company is None:
             raise CompanyNotFoundError(company_id)
+
+        target_user = await self.user_repository.get_by_id(data.user_id)
+        if target_user is None:
+            raise UserNotFoundError(data.user_id)
+
+        if target_user.role == UserRole.MANAGER and data.unit_id is None:
+            raise ManagerRequiresUnitError(data.user_id)
 
         if data.unit_id is not None:
             unit = await self.unit_repository.get_by_id(data.unit_id)

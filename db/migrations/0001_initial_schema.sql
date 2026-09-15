@@ -15,12 +15,16 @@ CREATE EXTENSION IF NOT EXISTS pgcrypto;
 -- admin:       acesso a toda a empresa (todas as unidades dela). Ao
 --              cadastrar um cliente, a empresa é automática (vínculo),
 --              mas ainda precisa escolher a unidade.
+-- manager:     gerencia uma unidade específica (nunca a empresa inteira —
+--              ver trg_company_users_manager_requires_unit). Vê tudo da(s)
+--              unidade(s) à(s) qual(is) está vinculado.
 -- attendant:   pode estar vinculado à empresa inteira ou apenas a
 --              unidade(s) específica(s). Se vinculado a uma única unidade,
 --              ela é preenchida automaticamente ao cadastrar um cliente.
 CREATE TYPE user_role AS ENUM (
     'super_admin',
     'admin',
+    'manager',
     'attendant'
 );
 
@@ -204,6 +208,30 @@ CREATE TRIGGER trg_company_users_parents_valid
 BEFORE INSERT OR UPDATE ON company_users
 FOR EACH ROW
 EXECUTE FUNCTION enforce_company_users_parents_valid();
+
+-- Regra específica do role manager: diferente de admin (empresa inteira)
+-- e attendant (pode ser empresa inteira ou unidade específica), o manager
+-- é sempre vinculado a uma unidade específica — nunca à empresa inteira.
+-- Um vínculo com unit_id nulo para um usuário manager é rejeitado aqui.
+CREATE OR REPLACE FUNCTION enforce_company_users_manager_requires_unit()
+RETURNS TRIGGER AS $$
+DECLARE
+    v_role user_role;
+BEGIN
+    SELECT role INTO v_role FROM users WHERE id = NEW.user_id;
+
+    IF v_role = 'manager' AND NEW.unit_id IS NULL THEN
+        RAISE EXCEPTION 'manager % must be linked to a specific unit, not the whole company', NEW.user_id;
+    END IF;
+
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_company_users_manager_requires_unit
+BEFORE INSERT OR UPDATE ON company_users
+FOR EACH ROW
+EXECUTE FUNCTION enforce_company_users_manager_requires_unit();
 
 -- Função central de autorização: um usuário tem acesso a uma unidade se
 -- for super_admin (acesso global), ou se tiver vínculo ativo em

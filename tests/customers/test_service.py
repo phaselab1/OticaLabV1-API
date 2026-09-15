@@ -111,6 +111,7 @@ def _service(company_user_repository: FakeCompanyUserRepository) -> CustomerServ
         company_user_repository,  # type: ignore[arg-type]
         None,  # type: ignore[arg-type]
         None,  # type: ignore[arg-type]
+        None,  # type: ignore[arg-type]
     )
     return CustomerService(FakeCustomerRepository(), company_user_service)  # type: ignore[arg-type]
 

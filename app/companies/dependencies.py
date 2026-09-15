@@ -5,6 +5,8 @@ from fastapi import Depends
 from app.companies.repository import CompanyRepository, CompanyUnitRepository, CompanyUserRepository
 from app.companies.service import CompanyService, CompanyUnitService, CompanyUserService
 from app.core.dependencies import SupabaseClient
+from app.users.dependencies import get_user_repository
+from app.users.repository import UserRepository
 
 
 def get_company_repository(db: SupabaseClient) -> CompanyRepository:
@@ -43,8 +45,9 @@ def get_company_user_service(
     repository: Annotated[CompanyUserRepository, Depends(get_company_user_repository)],
     company_repository: Annotated[CompanyRepository, Depends(get_company_repository)],
     unit_repository: Annotated[CompanyUnitRepository, Depends(get_company_unit_repository)],
+    user_repository: Annotated[UserRepository, Depends(get_user_repository)],
 ) -> CompanyUserService:
-    return CompanyUserService(repository, company_repository, unit_repository)
+    return CompanyUserService(repository, company_repository, unit_repository, user_repository)
 
 
 CompanyUserServiceDep = Annotated[CompanyUserService, Depends(get_company_user_service)]

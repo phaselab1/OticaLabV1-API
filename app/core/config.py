@@ -8,12 +8,12 @@ ACCESS_TOKEN_EXPIRE_MINUTES = 60
 
 
 class Settings(BaseSettings):
-    supabase_url: str
-    supabase_key: str
-    secret_key: str
+    supabase_url: str = "http://localhost:8000"
+    supabase_key: str = "change-me"
+    secret_key: str = "change-me-secret-key-at-least-32-chars-long"
     debug: bool = False
 
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
 
 @lru_cache

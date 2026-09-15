@@ -1,4 +1,4 @@
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import Depends
 from fastapi.security import OAuth2PasswordBearer
@@ -15,7 +15,7 @@ SupabaseClient = Annotated[AsyncClient, Depends(get_supabase)]
 
 async def get_token_payload(
     token: Annotated[str | None, Depends(oauth2_scheme)],
-) -> dict:
+) -> dict[str, Any]:
     if token is None:
         raise UnauthorizedError("Missing authentication token")
 

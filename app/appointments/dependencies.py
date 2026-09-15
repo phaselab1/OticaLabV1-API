@@ -4,6 +4,8 @@ from fastapi import Depends
 
 from app.appointments.repository import AppointmentHistoryRepository, AppointmentRepository
 from app.appointments.service import AppointmentHistoryService, AppointmentService
+from app.companies.dependencies import get_company_user_service
+from app.companies.service import CompanyUserService
 from app.core.dependencies import SupabaseClient
 from app.customers.dependencies import get_customer_repository
 from app.customers.repository import CustomerRepository
@@ -16,8 +18,9 @@ def get_appointment_repository(db: SupabaseClient) -> AppointmentRepository:
 def get_appointment_service(
     repository: Annotated[AppointmentRepository, Depends(get_appointment_repository)],
     customer_repository: Annotated[CustomerRepository, Depends(get_customer_repository)],
+    company_user_service: Annotated[CompanyUserService, Depends(get_company_user_service)],
 ) -> AppointmentService:
-    return AppointmentService(repository, customer_repository)
+    return AppointmentService(repository, customer_repository, company_user_service)
 
 
 AppointmentServiceDep = Annotated[AppointmentService, Depends(get_appointment_service)]

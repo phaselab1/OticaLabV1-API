@@ -1,10 +1,11 @@
+from collections.abc import Callable, Coroutine
 from typing import Annotated, Any
 
 from fastapi import Depends
 
 from app.core.dependencies import SupabaseClient, get_token_payload
-from app.core.exceptions import UnauthorizedError
-from app.users.model import User
+from app.core.exceptions import ForbiddenError, UnauthorizedError
+from app.users.model import User, UserRole
 from app.users.repository import UserRepository
 from app.users.service import UserService
 
@@ -38,3 +39,13 @@ async def get_current_user(
 
 
 CurrentUser = Annotated[User, Depends(get_current_user)]
+
+
+def require_role(*roles: UserRole) -> Callable[[User], Coroutine[Any, Any, User]]:
+    async def checker(current_user: CurrentUser) -> User:
+        if current_user.role not in roles:
+            allowed = ", ".join(role.value for role in roles)
+            raise ForbiddenError(f"Requires role: {allowed}")
+        return current_user
+
+    return checker

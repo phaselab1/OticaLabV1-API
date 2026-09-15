@@ -26,12 +26,23 @@ class CustomerRepository:
             raise
         return Customer.from_row(as_row(response.data[0]))
 
-    async def get_all(self, *, page: int, page_size: int) -> tuple[list[Customer], int]:
-        response = (
-            await self.db.table(TABLE)
-            .select("*", count=CountMethod.exact)
-            .is_("deleted_at", "null")
-            .order("created_at", desc=True)
+    async def get_all(
+        self,
+        *,
+        page: int,
+        page_size: int,
+        company_id: str | None = None,
+        company_unit_id: str | None = None,
+    ) -> tuple[list[Customer], int]:
+        query = self.db.table(TABLE).select("*", count=CountMethod.exact).is_("deleted_at", "null")
+
+        if company_id is not None:
+            query = query.eq("company_id", company_id)
+        if company_unit_id is not None:
+            query = query.eq("company_unit_id", company_unit_id)
+
+        response = await (
+            query.order("created_at", desc=True)
             .offset((page - 1) * page_size)
             .limit(page_size)
             .execute()

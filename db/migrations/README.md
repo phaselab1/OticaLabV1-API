@@ -6,11 +6,13 @@ Numeração sequencial (`0001_`, `0002_`, ...), sem edição de arquivos já apl
 
 ## Primeiro usuário (bootstrap)
 
-Não existe endpoint de auto-registro — todo `POST /users` exige um usuário autenticado. Por isso o primeiro `master` precisa ser inserido manualmente, direto no banco:
+Não existe endpoint de auto-registro — todo `POST /users` exige um `super_admin` autenticado. Por isso o primeiro `super_admin` precisa ser inserido manualmente, direto no banco:
 
 ```sql
 INSERT INTO users (full_name, email, password_hash, role)
-VALUES ('Admin', 'admin@example.com', '<hash bcrypt>', 'master');
+VALUES ('Admin', 'admin@example.com', '<hash bcrypt>', 'super_admin');
 ```
+
+Um `super_admin` tem acesso irrestrito a tudo (sem precisar de vínculo em `company_users`) e é o único role que pode criar empresas, unidades e outros usuários.
 
 O hash bcrypt pode ser gerado localmente com `python -c "from app.core.security import hash_password; print(hash_password('sua-senha'))"` (dentro do venv do projeto).

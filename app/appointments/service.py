@@ -2,6 +2,8 @@ from app.appointments.exceptions import AppointmentNotFoundError
 from app.appointments.model import Appointment, AppointmentHistoryEntry, AppointmentStatus
 from app.appointments.repository import AppointmentHistoryRepository, AppointmentRepository
 from app.appointments.schema import AppointmentCreate, AppointmentUpdate
+from app.companies.service import CompanyUserService
+from app.core.exceptions import ForbiddenError
 from app.customers.exceptions import CustomerNotFoundError
 from app.customers.repository import CustomerRepository
 from app.shared.pagination import Page
@@ -10,15 +12,26 @@ from app.users.model import User
 
 class AppointmentService:
     def __init__(
-        self, repository: AppointmentRepository, customer_repository: CustomerRepository
+        self,
+        repository: AppointmentRepository,
+        customer_repository: CustomerRepository,
+        company_user_service: CompanyUserService,
     ) -> None:
         self.repository = repository
         self.customer_repository = customer_repository
+        self.company_user_service = company_user_service
 
     async def create(self, data: AppointmentCreate, current_user: User) -> Appointment:
         customer = await self.customer_repository.get_by_id(data.customer_id)
         if customer is None:
             raise CustomerNotFoundError(data.customer_id)
+
+        if not await self.company_user_service.has_unit_access(
+            current_user, customer.company_id, customer.company_unit_id
+        ):
+            raise ForbiddenError(
+                f"No access to unit {customer.company_unit_id} of company {customer.company_id}"
+            )
 
         payload = data.model_dump(mode="json")
         payload["created_by_user_id"] = current_user.id
@@ -46,6 +59,15 @@ class AppointmentService:
     async def update(
         self, appointment_id: str, data: AppointmentUpdate, current_user: User
     ) -> Appointment:
+        existing = await self.get_by_id(appointment_id)
+        customer = await self.customer_repository.get_by_id(existing.customer_id)
+        if customer is not None and not await self.company_user_service.has_unit_access(
+            current_user, customer.company_id, customer.company_unit_id
+        ):
+            raise ForbiddenError(
+                f"No access to unit {customer.company_unit_id} of company {customer.company_id}"
+            )
+
         payload = data.model_dump(mode="json", exclude_unset=True)
         appointment = await self.repository.update_with_history(
             appointment_id,

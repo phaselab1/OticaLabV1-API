@@ -5,6 +5,7 @@ from postgrest.exceptions import APIError
 from postgrest.types import CountMethod
 from supabase import AsyncClient
 
+from app.appointments.exceptions import AppointmentAlreadyExistsError
 from app.appointments.model import Appointment, AppointmentHistoryEntry, AppointmentStatus
 from app.shared.utils.postgrest import as_row, as_rows
 
@@ -12,6 +13,7 @@ TABLE = "appointments"
 HISTORY_TABLE = "appointment_history"
 UPDATE_WITH_HISTORY_FN = "update_appointment_with_history"
 APPOINTMENT_NOT_FOUND = "P0002"
+UNIQUE_VIOLATION = "23505"
 
 
 class AppointmentRepository:
@@ -19,7 +21,14 @@ class AppointmentRepository:
         self.db = db
 
     async def create(self, data: dict[str, Any]) -> Appointment:
-        response = await self.db.table(TABLE).insert(data).execute()
+        try:
+            response = await self.db.table(TABLE).insert(data).execute()
+        except APIError as exc:
+            if exc.code == UNIQUE_VIOLATION:
+                raise AppointmentAlreadyExistsError(
+                    data["customer_id"], data["scheduled_at"]
+                ) from exc
+            raise
         return Appointment.from_row(as_row(response.data[0]))
 
     async def get_all(

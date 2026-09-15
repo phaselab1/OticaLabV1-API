@@ -7,9 +7,14 @@ from app.appointments.exceptions import AppointmentNotFoundError
 from app.appointments.model import Appointment, AppointmentHistoryEntry, AppointmentStatus
 from app.appointments.schema import AppointmentCreate, AppointmentUpdate
 from app.appointments.service import AppointmentHistoryService, AppointmentService
+from app.companies.model import CompanyUserLink
+from app.companies.service import CompanyUserService
 from app.customers.exceptions import CustomerNotFoundError
 from app.customers.model import Customer
 from app.users.model import User, UserRole
+
+COMPANY_ID = "company-a"
+UNIT_ID = "unit-a1"
 
 
 class FakeAppointmentRepository:
@@ -111,13 +116,25 @@ class FakeCustomerRepository:
         now = datetime.now(UTC)
         return Customer(
             id=customer_id,
+            company_id=COMPANY_ID,
+            company_unit_id=UNIT_ID,
             full_name="Ana Silva",
             date_of_birth=now.date(),
             phone=None,
+            created_by_user_id="user-1",
+            updated_by_user_id=None,
             created_at=now,
             updated_at=now,
             deleted_at=None,
         )
+
+
+class FakeCompanyUserRepository:
+    def __init__(self, links: list[CompanyUserLink]) -> None:
+        self.links = links
+
+    async def get_all_for_user(self, user_id: str) -> list[CompanyUserLink]:
+        return [link for link in self.links if link.user_id == user_id]
 
 
 @pytest.fixture
@@ -141,10 +158,29 @@ def appointment_repository() -> FakeAppointmentRepository:
 
 
 @pytest.fixture
-def service(appointment_repository: FakeAppointmentRepository) -> AppointmentService:
+def service(
+    appointment_repository: FakeAppointmentRepository, current_user: User
+) -> AppointmentService:
+    now = datetime.now(UTC)
+    link = CompanyUserLink(
+        id="link-1",
+        company_id=COMPANY_ID,
+        user_id=current_user.id,
+        unit_id=UNIT_ID,
+        granted_by_user_id="granter",
+        created_at=now,
+        updated_at=now,
+        deleted_at=None,
+    )
+    company_user_service = CompanyUserService(
+        FakeCompanyUserRepository([link]),  # type: ignore[arg-type]
+        None,  # type: ignore[arg-type]
+        None,  # type: ignore[arg-type]
+    )
     return AppointmentService(
         appointment_repository,  # type: ignore[arg-type]
         FakeCustomerRepository({"customer-1"}),  # type: ignore[arg-type]
+        company_user_service,
     )
 
 
@@ -172,6 +208,39 @@ async def test_create_appointment_for_unknown_customer_raises(
 async def test_get_by_id_missing_raises_not_found(service: AppointmentService) -> None:
     with pytest.raises(AppointmentNotFoundError):
         await service.get_by_id("missing")
+
+
+async def test_create_appointment_without_unit_access_forbidden(
+    appointment_repository: FakeAppointmentRepository,
+) -> None:
+    from app.core.exceptions import ForbiddenError
+
+    now = datetime.now(UTC)
+    outsider = User(
+        id="user-2",
+        full_name="Outsider",
+        email="outsider@example.com",
+        password_hash="hash",
+        role=UserRole.ATTENDANT,
+        created_at=now,
+        updated_at=now,
+        deleted_at=None,
+    )
+    company_user_service = CompanyUserService(
+        FakeCompanyUserRepository([]),  # type: ignore[arg-type]
+        None,  # type: ignore[arg-type]
+        None,  # type: ignore[arg-type]
+    )
+    service = AppointmentService(
+        appointment_repository,  # type: ignore[arg-type]
+        FakeCustomerRepository({"customer-1"}),  # type: ignore[arg-type]
+        company_user_service,
+    )
+
+    with pytest.raises(ForbiddenError):
+        await service.create(
+            AppointmentCreate(customer_id="customer-1", scheduled_at=datetime.now(UTC)), outsider
+        )
 
 
 async def test_update_status_records_history(

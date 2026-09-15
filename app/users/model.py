@@ -5,7 +5,8 @@ from typing import Any
 
 
 class UserRole(StrEnum):
-    MASTER = "master"
+    SUPER_ADMIN = "super_admin"
+    ADMIN = "admin"
     ATTENDANT = "attendant"
 
 

@@ -13,14 +13,14 @@ from app.users.model import User, UserRole
 from app.users.schema import UserCreate, UserUpdate
 
 
-def _fake_current_user() -> User:
+def _fake_current_user(role: UserRole = UserRole.SUPER_ADMIN) -> User:
     now = datetime.now(UTC)
     return User(
         id="user-1",
         full_name="Admin",
         email="admin@example.com",
         password_hash="hash",
-        role=UserRole.MASTER,
+        role=role,
         created_at=now,
         updated_at=now,
         deleted_at=None,
@@ -86,6 +86,17 @@ def test_create_user_requires_auth(client: TestClient) -> None:
     )
 
     assert response.status_code == 401
+
+
+def test_create_user_as_attendant_forbidden(client: TestClient) -> None:
+    app.dependency_overrides[get_current_user] = lambda: _fake_current_user(UserRole.ATTENDANT)
+
+    response = client.post(
+        "/users/",
+        json={"full_name": "Ana", "email": "ana@example.com", "password": "supersecret"},
+    )
+
+    assert response.status_code == 403
 
 
 def test_create_user(client: TestClient) -> None:

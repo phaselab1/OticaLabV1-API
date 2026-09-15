@@ -1,3 +1,10 @@
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["app*"]
+
 [project]
 name = "otica-lab-api"
 version = "0.1.0"
@@ -8,9 +15,11 @@ dependencies = [
     "uvicorn[standard]>=0.30.0",
     "pydantic>=2.9.0",
     "pydantic-settings>=2.5.0",
+    "email-validator>=2.0.0",
     "supabase>=2.9.0",
+    "postgrest>=0.16.0",
     "python-jose[cryptography]>=3.3.0",
-    "passlib[bcrypt]>=1.7.4",
+    "bcrypt>=4.0.0",
     "python-multipart>=0.0.9",
 ]
 
@@ -22,7 +31,6 @@ dev = [
     "ruff>=0.6.0",
     "mypy>=1.11.0",
     "types-python-jose>=3.3.0",
-    "types-passlib>=1.7.0",
     "pre-commit>=3.8.0",
 ]
 

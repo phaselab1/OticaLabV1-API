@@ -18,3 +18,11 @@ async def get_supabase() -> AsyncClient:
                 _client = await acreate_client(settings.supabase_url, settings.supabase_key)
 
     return _client
+
+
+async def close_supabase() -> None:
+    global _client
+
+    if _client is not None:
+        await _client.postgrest.aclose()
+        _client = None

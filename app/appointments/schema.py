@@ -27,6 +27,16 @@ class AppointmentUpdate(BaseModel):
     )
 
 
+class AppointmentReschedule(BaseModel):
+    scheduled_at: datetime = Field(
+        description="Nova data e hora do reagendamento (ISO 8601 com fuso)."
+    )
+    notes: str | None = Field(
+        default=None,
+        description="Observações ou motivo do reagendamento.",
+    )
+
+
 class AppointmentResponse(BaseModel):
     id: str = Field(description="UUID do agendamento.")
     customer_id: str

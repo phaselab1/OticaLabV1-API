@@ -7,6 +7,7 @@ from app.appointments.model import Appointment, AppointmentHistoryEntry, Appoint
 from app.appointments.schema import (
     AppointmentCreate,
     AppointmentHistoryResponse,
+    AppointmentReschedule,
     AppointmentResponse,
     AppointmentUpdate,
 )
@@ -129,6 +130,26 @@ async def update_appointment(
     ou não acontecem. `updated_by_user_id` vem do usuário autenticado.
     """
     return await service.update(appointment_id, data, current_user)
+
+
+@router.patch(
+    "/{appointment_id}/reschedule",
+    response_model=AppointmentResponse,
+    summary="Reagendar agendamento",
+    responses={
+        401: {"description": "Token ausente ou inválido."},
+        403: {"description": "Usuário não tem acesso à unidade deste cliente."},
+        404: {"description": "Agendamento não encontrado (ou soft-deletado)."},
+        409: {"description": "Este cliente já tem um agendamento ativo neste exato horário."},
+    },
+)
+async def reschedule_appointment(
+    appointment_id: AppointmentIdPath,
+    data: AppointmentReschedule,
+    service: AppointmentServiceDep,
+    current_user: CurrentUser,
+) -> Appointment:
+    return await service.reschedule(appointment_id, data, current_user)
 
 
 @router.delete(

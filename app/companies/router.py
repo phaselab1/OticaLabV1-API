@@ -89,7 +89,7 @@ async def get_company(company_id: CompanyIdPath, service: CompanyServiceDep) -> 
     summary="Atualizar empresa",
     responses={
         401: {"description": "Token ausente ou inválido."},
-        403: {"description": "Requer role `super_admin`."},
+        403: {"description": "Requer permissão de administrador na empresa."},
         404: {"description": "Empresa não encontrada (ou soft-deletada)."},
         409: {"description": "Já existe outra empresa ativa com o novo CNPJ informado."},
     },
@@ -98,10 +98,10 @@ async def update_company(
     company_id: CompanyIdPath,
     data: CompanyUpdate,
     service: CompanyServiceDep,
-    _current_user: RequireSuperAdmin,
+    current_user: CurrentUser,
 ) -> Company:
-    """Atualiza campos de uma empresa (parcial). **Exige role `super_admin`.**"""
-    return await service.update(company_id, data)
+    """Atualiza campos de uma empresa (parcial). Requer acesso de admin/super_admin."""
+    return await service.update(company_id, data, current_user)
 
 
 @router.delete(
@@ -189,7 +189,7 @@ async def get_company_unit(
     summary="Atualizar unidade",
     responses={
         401: {"description": "Token ausente ou inválido."},
-        403: {"description": "Requer role `super_admin`."},
+        403: {"description": "Requer permissão de administrador na unidade/empresa."},
         404: {"description": "Unidade não encontrada (ou soft-deletada)."},
         409: {
             "description": "Já existe outra unidade ativa com o novo `code` ou CNPJ nesta empresa."
@@ -200,10 +200,10 @@ async def update_company_unit(
     unit_id: Annotated[str, Path(description="UUID da unidade.")],
     data: CompanyUnitUpdate,
     service: CompanyUnitServiceDep,
-    _current_user: RequireSuperAdmin,
+    current_user: CurrentUser,
 ) -> CompanyUnit:
-    """Atualiza campos de uma unidade (parcial). **Exige role `super_admin`.**"""
-    return await service.update(unit_id, data)
+    """Atualiza campos de uma unidade (parcial). Requer permissão de admin/super_admin."""
+    return await service.update(unit_id, data, current_user)
 
 
 @router.delete(

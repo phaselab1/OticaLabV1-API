@@ -52,7 +52,13 @@ class CompanyService:
             raise CompanyNotFoundError(company_id)
         return company
 
-    async def update(self, company_id: str, data: CompanyUpdate) -> Company:
+    async def update(self, company_id: str, data: CompanyUpdate, current_user: User) -> Company:
+        if current_user.role != UserRole.SUPER_ADMIN:
+            links = await self.company_user_repository.get_all_for_user(current_user.id)
+            has_admin = any(link.company_id == company_id and link.unit_id is None for link in links)
+            if not has_admin:
+                raise ForbiddenError("Insufficient access to manage this company")
+
         payload = data.model_dump(mode="json", exclude_unset=True)
         company = await self.repository.update(company_id, payload)
         if company is None:
@@ -94,7 +100,16 @@ class CompanyUnitService:
             raise CompanyUnitNotFoundError(unit_id)
         return unit
 
-    async def update(self, unit_id: str, data: CompanyUnitUpdate) -> CompanyUnit:
+    async def update(
+        self, unit_id: str, data: CompanyUnitUpdate, current_user: User
+    ) -> CompanyUnit:
+        existing = await self.get_by_id(unit_id)
+        if current_user.role != UserRole.SUPER_ADMIN:
+            links = await self.company_repository.db.table("company_users").select("*").eq("user_id", current_user.id).eq("company_id", existing.company_id).is_("deleted_at", "null").execute()
+            has_admin = any(link.get("unit_id") is None or link.get("unit_id") == unit_id for link in links.data)
+            if not has_admin:
+                raise ForbiddenError("Insufficient access to manage this unit")
+
         payload = data.model_dump(mode="json", exclude_unset=True)
         unit = await self.repository.update(unit_id, payload)
         if unit is None:

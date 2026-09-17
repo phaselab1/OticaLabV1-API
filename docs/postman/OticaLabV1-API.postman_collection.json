@@ -2865,7 +2865,7 @@
     },
     {
       "name": "Appointments",
-      "description": "Agendamentos, escopados à empresa/unidade própria (não mais herdada de um cliente). Começam como LEAD — nome/nascimento/telefone guardados no próprio agendamento — e só viram cliente de fato (`customers`) quando marcados `completed`. Toda edição bem-sucedida grava uma linha imutável em `appointment_history`, na mesma transação do UPDATE (função RPC no Postgres).",
+      "description": "Agendamentos, escopados à empresa/unidade própria (não mais herdada de um cliente). Começam como LEAD — nome/nascimento/telefone guardados no próprio agendamento — e só viram cliente de fato (`customers`) quando marcados `completed`. O mesmo lead não pode ter dois agendamentos no mesmo horário exato (índice único parcial, migration `0005`). Toda edição bem-sucedida grava uma linha imutável em `appointment_history`, na mesma transação do UPDATE (função RPC no Postgres).",
       "item": [
         {
           "name": "Create appointment (lead)",
@@ -2956,6 +2956,93 @@
           ]
         },
         {
+          "name": "Create appointment - lead duplicado no mesmo horário (409)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/appointments/",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "appointments",
+                ""
+              ]
+            },
+            "description": "Exemplo de falha: mesmo lead (nome + nascimento, mesma empresa) já tem um agendamento ativo neste exato horário. Restaurado pela migration `0005` — `customer_id` nulo não colide num índice único comum, então essa proteção precisou de um índice parcial dedicado escopado a `customer_id IS NULL`.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"lead_full_name\": \"Fernanda Costa\",\n    \"lead_date_of_birth\": \"1992-08-15\",\n    \"lead_phone\": \"11988887777\",\n    \"scheduled_at\": \"2026-06-15T14:30:00Z\",\n    \"notes\": \"Primeira consulta\",\n    \"company_id\": \"{{company_id}}\",\n    \"company_unit_id\": \"{{unit_id}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [
+            {
+              "name": "409 example",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/appointments/",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "appointments",
+                    ""
+                  ]
+                },
+                "description": "Exemplo de falha: mesmo lead (nome + nascimento, mesma empresa) já tem um agendamento ativo neste exato horário. Restaurado pela migration `0005` — `customer_id` nulo não colide num índice único comum, então essa proteção precisou de um índice parcial dedicado escopado a `customer_id IS NULL`.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n    \"lead_full_name\": \"Fernanda Costa\",\n    \"lead_date_of_birth\": \"1992-08-15\",\n    \"lead_phone\": \"11988887777\",\n    \"scheduled_at\": \"2026-06-15T14:30:00Z\",\n    \"notes\": \"Primeira consulta\",\n    \"company_id\": \"{{company_id}}\",\n    \"company_unit_id\": \"{{unit_id}}\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "OK",
+              "code": 409,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n    \"detail\": \"Fernanda Costa already has an active appointment at 2026-06-15T14:30:00Z\"\n}"
+            }
+          ],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 409\", function () { pm.response.to.have.status(409); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
           "name": "Create appointment - data de nascimento ausente (422)",
           "request": {
             "method": "POST",
@@ -3037,6 +3124,93 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test(\"Status code is 422\", function () { pm.response.to.have.status(422); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create appointment - empresa/unidade inexistente (400)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/appointments/",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "appointments",
+                ""
+              ]
+            },
+            "description": "Exemplo de falha: `company_id`/`company_unit_id` com UUID bem formado mas que não existe. As triggers de validação de pai (`enforce_appointment_parents_valid`, migration `0004`) rejeitam antes mesmo da constraint de FK, com `RAISE EXCEPTION` sem `ERRCODE` explícito (SQLSTATE `P0001`) — o handler global de `APIError` em `app/core/exceptions.py` traduz isso num `400` limpo com a mensagem da trigger, em vez do `500` genérico que caía antes desse fix.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"lead_full_name\": \"Fantasma\",\n    \"lead_date_of_birth\": \"1990-01-01\",\n    \"scheduled_at\": \"2026-09-01T10:00:00Z\",\n    \"company_id\": \"00000000-0000-4000-8000-000000000000\",\n    \"company_unit_id\": \"00000000-0000-4000-8000-000000000001\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [
+            {
+              "name": "400 example",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/appointments/",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "appointments",
+                    ""
+                  ]
+                },
+                "description": "Exemplo de falha: `company_id`/`company_unit_id` com UUID bem formado mas que não existe. As triggers de validação de pai (`enforce_appointment_parents_valid`, migration `0004`) rejeitam antes mesmo da constraint de FK, com `RAISE EXCEPTION` sem `ERRCODE` explícito (SQLSTATE `P0001`) — o handler global de `APIError` em `app/core/exceptions.py` traduz isso num `400` limpo com a mensagem da trigger, em vez do `500` genérico que caía antes desse fix.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n    \"lead_full_name\": \"Fantasma\",\n    \"lead_date_of_birth\": \"1990-01-01\",\n    \"scheduled_at\": \"2026-09-01T10:00:00Z\",\n    \"company_id\": \"00000000-0000-4000-8000-000000000000\",\n    \"company_unit_id\": \"00000000-0000-4000-8000-000000000001\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "OK",
+              "code": 400,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n    \"detail\": \"unit 00000000-0000-4000-8000-000000000001 does not belong to company 00000000-0000-4000-8000-000000000000\"\n}"
+            }
+          ],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 400\", function () { pm.response.to.have.status(400); });"
                 ]
               }
             }

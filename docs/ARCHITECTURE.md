@@ -261,6 +261,12 @@ Sem Alembic — [`db/migrations/0001_initial_schema.sql`](../db/migrations/0001_
 - `SET search_path = public` em toda function, hardening padrão contra manipulação de `search_path`.
 - Tabela `login_attempts`, usada pelo rate limiting de `POST /auth/login` (veja abaixo).
 
+[`0003_restore_service_role_access.sql`](../db/migrations/0003_restore_service_role_access.sql) — correção de emergência: nesta instância self-hosted, `service_role` herda privilégios por membresia em `authenticated`/`anon` em vez de ter GRANTs próprios, então o `REVOKE` da `0002` cascateou e cortou o acesso da própria API. Restaura GRANTs explícitos + `BYPASSRLS` para `service_role`, independente de qualquer relação de herança de role.
+
+[`0004_appointment_leads.sql`](../db/migrations/0004_appointment_leads.sql) — base do fluxo de lead descrito em [De lead a cliente](#de-lead-a-cliente): `appointments.customer_id` vira nullable, e `company_id`/`company_unit_id`/`lead_full_name`/`lead_date_of_birth`/`lead_phone` passam a viver direto em `appointments` (antes só existiam via join em `customer_id`). Triggers de validação/autorização reescritos para usar essas colunas próprias; `update_appointment_with_history` ganha o parâmetro `p_customer_id`.
+
+[`0005_appointment_lead_duplicate_guard.sql`](../db/migrations/0005_appointment_lead_duplicate_guard.sql) — a `0004` tornar `customer_id` nullable quebrou silenciosamente `uq_appointments_customer_scheduled_at` para leads (`NULL` nunca colide num índice único), permitindo o mesmo lead ser agendado duas vezes no mesmo horário exato. Restaura essa proteção com um índice único parcial `(company_id, lead_full_name, lead_date_of_birth, scheduled_at) WHERE customer_id IS NULL AND deleted_at IS NULL`.
+
 ### Rate limiting de login
 
 `POST /auth/login` bloqueia (`429`) após 5 tentativas com falha para o mesmo e-mail em 15 minutos. O contador vive na tabela `login_attempts` (Postgres), não em memória do processo — necessário para a API escalar horizontalmente sem estado compartilhado entre instâncias. Cada tentativa (sucesso ou falha) também é registrada ali, servindo de trilha de auditoria básica de login.
@@ -281,7 +287,9 @@ chamada via `client.rpc(...)` em [`app/appointments/repository.py`](../app/appoi
 
 Quando `PUT /appointments/{id}` marca `status: "completed"` pela primeira vez, `AppointmentService._promote_lead_to_customer` procura um cliente já existente com o mesmo nome + nascimento nesta empresa (`CustomerRepository.get_by_identity`) — se achar, reaproveita; senão cria um novo — e passa o `customer_id` resultante para `update_appointment_with_history` (parâmetro `p_customer_id`, adicionado na migration [`0004_appointment_leads.sql`](../db/migrations/0004_appointment_leads.sql)), que faz `COALESCE(p_customer_id, customer_id)` no mesmo `UPDATE` do status/histórico. `cancelled`/`no_show` nunca promovem o lead.
 
-A busca do cliente existente e a criação/atualização do agendamento são duas chamadas HTTP separadas (limitação do PostgREST — só a segunda parte, `UPDATE` + histórico, é atômica via RPC). Na pior hipótese de falha entre as duas chamadas, um cliente pode ficar criado sem o agendamento ainda referenciá-lo; não há perda de dado nem estado inconsistente de autorização, só uma reconciliação manual pontual.
+A busca do cliente existente e a criação/atualização do agendamento são duas chamadas HTTP separadas (limitação do PostgREST — só a segunda parte, `UPDATE` + histórico, é atômica via RPC). Isso deixa uma janela de corrida (TOCTOU): duas completions concorrentes do mesmo lead (mesmo nome + nascimento, mesma empresa) podem passar as duas pelo `SELECT` sem achar nada e colidir no `INSERT`. `AppointmentService._promote_lead_to_customer` trata isso — se o `create` estourar `CustomerAlreadyExistsError`, repete o `get_by_identity` uma vez e reaproveita a linha que a chamada concorrente vencedora acabou de commitar, em vez de propagar o erro. Falha de forma segura mesmo sem esse retry: o agendamento só é atualizado depois da promoção resolver, então nunca fica em estado parcial.
+
+O agendamento em si também não permite duplicidade: `uq_appointments_lead_scheduled_at` (índice único parcial da migration [`0005`](../db/migrations/0005_appointment_lead_duplicate_guard.sql)) bloqueia o mesmo lead marcando dois horários idênticos antes de ser promovido — espelhando `uq_appointments_customer_scheduled_at`, que já cobria esse caso para clientes.
 
 ## Tratamento de erros
 
@@ -299,6 +307,17 @@ Cada feature define suas próprias exceções (`XNotFoundError`, `XAlreadyExists
 | Validação de schema (Pydantic) | — | 422 |
 
 Repositories traduzem erros do Postgres (`APIError.code`) em exceções de domínio — ex: `23505` (unique_violation) → `XAlreadyExistsError`; `P0002` (customizado na function RPC) → `AppointmentNotFoundError`.
+
+Para qualquer `APIError` que **não** seja tratada num repository específico, [`app/core/exceptions.py`](../app/core/exceptions.py) registra um handler global (`postgrest_api_error_handler`) que cobre os casos mais comuns de erro de input propagando cru do Postgres, em vez de cair no fallback genérico `500`:
+
+| SQLSTATE | Situação | HTTP |
+|---|---|---|
+| `22P02` (invalid_text_representation) | Path/body param que devia ser UUID não é um (formato inválido) | 404 |
+| `23503` (foreign_key_violation) | Constraint de FK crua rejeitando a linha (caminho raramente alcançado — normalmente as triggers de validação de pai, abaixo, capturam antes) | 404 |
+| `P0001` (raise_exception sem ERRCODE explícito) | Qualquer trigger de validação/autorização (`enforce_*_parents_valid`, `enforce_*_company_access`, `enforce_company_users_manager_requires_unit`, ...) rejeitando a operação — inclui o caso de `company_id`/`company_unit_id`/`customer_id` com UUID válido mas inexistente, que essas triggers pegam antes da FK ter chance de rejeitar | 400, com a mensagem da trigger repassada em `detail` |
+| qualquer outro código | Não mapeado — logado via `logger.error` e devolvido sem detalhe | 500 |
+
+As mensagens de `RAISE EXCEPTION` nas migrations só ecoam IDs que o próprio caller já enviou ou uma descrição de regra de negócio (nunca schema interno ou segredo), por isso é seguro repassar `P0001` como `detail` de um jeito que não seria pra um `500` genérico.
 
 ## Escalabilidade
 

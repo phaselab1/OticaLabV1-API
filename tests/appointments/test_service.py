@@ -281,7 +281,7 @@ async def test_create_appointment_without_unit_access_forbidden(
         await service.create(_lead_create(company_id=COMPANY_ID, company_unit_id=UNIT_ID), outsider)
 
 
-async def test_update_status_confirmed_does_not_create_customer(
+async def test_update_status_cancelled_does_not_create_customer(
     service: AppointmentService,
     appointment_repository: FakeAppointmentRepository,
     customer_repository: FakeCustomerRepository,
@@ -290,16 +290,16 @@ async def test_update_status_confirmed_does_not_create_customer(
     created = await service.create(_lead_create(), current_user)
 
     updated = await service.update(
-        created.id, AppointmentUpdate(status=AppointmentStatus.CONFIRMED), current_user
+        created.id, AppointmentUpdate(status=AppointmentStatus.CANCELLED), current_user
     )
 
-    assert updated.status == AppointmentStatus.CONFIRMED
+    assert updated.status == AppointmentStatus.CANCELLED
     assert updated.customer_id is None
     assert customer_repository.rows == {}
     assert appointment_repository.history[0]["previous_status"] == AppointmentStatus.SCHEDULED.value
 
 
-async def test_update_status_completed_promotes_lead_to_customer(
+async def test_update_status_attended_promotes_lead_to_customer(
     service: AppointmentService,
     customer_repository: FakeCustomerRepository,
     current_user: User,
@@ -307,10 +307,10 @@ async def test_update_status_completed_promotes_lead_to_customer(
     created = await service.create(_lead_create(), current_user)
 
     updated = await service.update(
-        created.id, AppointmentUpdate(status=AppointmentStatus.COMPLETED), current_user
+        created.id, AppointmentUpdate(status=AppointmentStatus.ATTENDED), current_user
     )
 
-    assert updated.status == AppointmentStatus.COMPLETED
+    assert updated.status == AppointmentStatus.ATTENDED
     assert updated.customer_id is not None
     customer = customer_repository.rows[updated.customer_id]
     assert customer["full_name"] == LEAD_NAME
@@ -318,7 +318,7 @@ async def test_update_status_completed_promotes_lead_to_customer(
     assert customer["company_unit_id"] == UNIT_ID
 
 
-async def test_update_status_completed_reuses_existing_customer(
+async def test_update_status_attended_reuses_existing_customer(
     service: AppointmentService,
     customer_repository: FakeCustomerRepository,
     current_user: User,
@@ -335,14 +335,14 @@ async def test_update_status_completed_reuses_existing_customer(
 
     created = await service.create(_lead_create(), current_user)
     updated = await service.update(
-        created.id, AppointmentUpdate(status=AppointmentStatus.COMPLETED), current_user
+        created.id, AppointmentUpdate(status=AppointmentStatus.ATTENDED), current_user
     )
 
     assert updated.customer_id == existing_customer.id
     assert len(customer_repository.rows) == 1
 
 
-async def test_update_status_completed_retries_after_concurrent_promotion_race(
+async def test_update_status_attended_retries_after_concurrent_promotion_race(
     service: AppointmentService,
     customer_repository: FakeCustomerRepository,
     current_user: User,
@@ -351,10 +351,10 @@ async def test_update_status_completed_retries_after_concurrent_promotion_race(
     customer_repository.simulate_race_once = True
 
     updated = await service.update(
-        created.id, AppointmentUpdate(status=AppointmentStatus.COMPLETED), current_user
+        created.id, AppointmentUpdate(status=AppointmentStatus.ATTENDED), current_user
     )
 
-    assert updated.status == AppointmentStatus.COMPLETED
+    assert updated.status == AppointmentStatus.ATTENDED
     assert updated.customer_id == "race-winner"
     assert len(customer_repository.rows) == 1
 
@@ -380,7 +380,7 @@ async def test_update_missing_appointment_raises_not_found(
 ) -> None:
     with pytest.raises(AppointmentNotFoundError):
         await service.update(
-            "missing", AppointmentUpdate(status=AppointmentStatus.CONFIRMED), current_user
+            "missing", AppointmentUpdate(status=AppointmentStatus.CANCELLED), current_user
         )
 
 
@@ -402,7 +402,7 @@ async def test_history_service_returns_entries_for_existing_appointment(
 ) -> None:
     created = await service.create(_lead_create(), current_user)
     await service.update(
-        created.id, AppointmentUpdate(status=AppointmentStatus.CONFIRMED), current_user
+        created.id, AppointmentUpdate(status=AppointmentStatus.CANCELLED), current_user
     )
 
     company_user_service = _company_user_service([_link(current_user.id, COMPANY_ID, UNIT_ID)])
@@ -415,7 +415,7 @@ async def test_history_service_returns_entries_for_existing_appointment(
     page = await history_service.get_by_appointment(created.id, current_user, page=1, page_size=20)
 
     assert page.total == 1
-    assert page.items[0].new_status == AppointmentStatus.CONFIRMED
+    assert page.items[0].new_status == AppointmentStatus.CANCELLED
 
 
 async def test_history_service_unknown_appointment_raises_not_found(

@@ -74,7 +74,7 @@ class FakeAppointmentService:
         changes = data.model_dump(exclude_unset=True)
 
         customer_id = appointment.customer_id
-        if changes.get("status") == AppointmentStatus.COMPLETED and customer_id is None:
+        if changes.get("status") == AppointmentStatus.ATTENDED and customer_id is None:
             customer_id = f"customer-{self.next_customer_id}"
             self.next_customer_id += 1
 
@@ -104,7 +104,7 @@ class FakeAppointmentHistoryService:
             previous_scheduled_at=now,
             new_scheduled_at=now,
             previous_status=AppointmentStatus.SCHEDULED,
-            new_status=AppointmentStatus.CONFIRMED,
+            new_status=AppointmentStatus.CANCELLED,
             previous_notes=None,
             new_notes=None,
             changed_at=now,
@@ -156,24 +156,24 @@ def test_get_appointment_not_found(client: TestClient) -> None:
     assert response.status_code == 404
 
 
-def test_update_appointment_status_confirmed_keeps_lead(client: TestClient) -> None:
+def test_update_appointment_status_cancelled_keeps_lead(client: TestClient) -> None:
     created = client.post("/appointments/", json=LEAD_PAYLOAD).json()
 
-    updated = client.put(f"/appointments/{created['id']}", json={"status": "confirmed"})
+    updated = client.put(f"/appointments/{created['id']}", json={"status": "cancelled"})
 
     assert updated.status_code == 200
-    assert updated.json()["status"] == "confirmed"
+    assert updated.json()["status"] == "cancelled"
     assert updated.json()["updated_by_user_id"] == "user-1"
     assert updated.json()["customer_id"] is None
 
 
-def test_update_appointment_status_completed_promotes_to_customer(client: TestClient) -> None:
+def test_update_appointment_status_attended_promotes_to_customer(client: TestClient) -> None:
     created = client.post("/appointments/", json=LEAD_PAYLOAD).json()
 
-    updated = client.put(f"/appointments/{created['id']}", json={"status": "completed"})
+    updated = client.put(f"/appointments/{created['id']}", json={"status": "attended"})
 
     assert updated.status_code == 200
-    assert updated.json()["status"] == "completed"
+    assert updated.json()["status"] == "attended"
     assert updated.json()["customer_id"] is not None
 
 
@@ -183,7 +183,7 @@ def test_get_appointment_history(client: TestClient) -> None:
     assert response.status_code == 200
     body = response.json()
     assert body["total"] == 1
-    assert body["items"][0]["new_status"] == "confirmed"
+    assert body["items"][0]["new_status"] == "cancelled"
 
 
 def test_get_appointment_history_not_found(client: TestClient) -> None:

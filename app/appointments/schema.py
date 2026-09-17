@@ -11,7 +11,7 @@ class AppointmentCreate(BaseModel):
         max_length=255,
         description=(
             "Nome completo de quem está marcando o horário. Ainda não é um cliente — "
-            "não gera linha em `customers` até o agendamento ser marcado `completed`."
+            "não gera linha em `customers` até o agendamento ser marcado `attended`."
         ),
         examples=["Bruno Souza"],
     )
@@ -53,7 +53,7 @@ class AppointmentUpdate(BaseModel):
     status: AppointmentStatus | None = Field(
         default=None,
         description=(
-            "Novo status, se for alterar. Marcar `completed` (compareceu) promove o lead a "
+            "Novo status, se for alterar. Marcar `attended` (compareceu) promove o lead a "
             "cliente de verdade: cria (ou reaproveita, se já existir pelo nome nesta empresa) "
             "a linha em `customers` e liga `customer_id` automaticamente."
         ),
@@ -84,7 +84,7 @@ class AppointmentResponse(BaseModel):
     lead_phone: str | None = Field(description="Telefone informado ao marcar.")
     customer_id: str | None = Field(
         description=(
-            "UUID do cliente, se o lead já foi promovido (agendamento marcado `completed` "
+            "UUID do cliente, se o lead já foi promovido (agendamento marcado `attended` "
             "ao menos uma vez). Nulo enquanto ainda é só um lead."
         )
     )

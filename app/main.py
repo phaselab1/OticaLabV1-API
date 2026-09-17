@@ -36,7 +36,7 @@ direto no banco (veja `db/migrations/README.md`).
 company (empresa)
   └── company_unit (unidade/filial)
         ├── appointment (agendamento — empresa/unidade próprias, cliente opcional)
-        └── customer (cliente, só existe a partir de um agendamento completed)
+        └── customer (cliente, só existe a partir de um agendamento attended)
 ```
 
 O acesso de um usuário a uma empresa/unidade vem de `company_users`
@@ -69,7 +69,7 @@ atualização — não é uma chamada separada da aplicação.
 
 `POST /appointments` não recebe `customer_id` — recebe nome e telefone de
 quem está marcando (`lead_full_name`/`lead_phone`). Esse lead só vira um
-registro em `customers` quando o agendamento é marcado `completed`
+registro em `customers` quando o agendamento é marcado `attended`
 (compareceu) via `PUT /appointments/{id}`; `cancelled`/`no_show` nunca
 geram cliente.
 """.strip()
@@ -97,7 +97,7 @@ OPENAPI_TAGS = [
         "name": "customers",
         "description": (
             "Clientes atendidos. Só passam a existir aqui quando um agendamento (lead) "
-            "é marcado `completed` — não há cadastro direto de cliente sem agendamento."
+            "é marcado `attended` — não há cadastro direto de cliente sem agendamento."
         ),
     },
     {
@@ -105,7 +105,7 @@ OPENAPI_TAGS = [
         "description": (
             "Agendamentos, escopados à empresa/unidade própria. Começam como lead (nome/"
             "telefone no próprio agendamento); viram cliente ao serem marcados "
-            "`completed`. Toda edição gera uma linha imutável em `appointment_history`."
+            "`attended`. Toda edição gera uma linha imutável em `appointment_history`."
         ),
     },
 ]

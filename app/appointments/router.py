@@ -53,7 +53,7 @@ async def create_appointment(
     `customers`.
 
     O lead só vira cliente de verdade quando o agendamento é marcado como
-    `completed` (compareceu) via `PUT /appointments/{id}` — veja a
+    `attended` (compareceu) via `PUT /appointments/{id}` — veja a
     descrição desse campo lá.
 
     `company_id`/`company_unit_id` seguem a mesma regra de
@@ -162,7 +162,7 @@ async def update_appointment(
     que garante que o `UPDATE` e o registro de auditoria acontecem juntos
     ou não acontecem. `updated_by_user_id` vem do usuário autenticado.
 
-    Marcar `status: "completed"` (compareceu) pela primeira vez promove o
+    Marcar `status: "attended"` (compareceu) pela primeira vez promove o
     lead a cliente: a API cria (ou reaproveita, se já existir pelo nome
     nesta empresa) a linha em `customers` e liga `customer_id` ao
     agendamento — sem chamada extra do cliente da API. `cancelled` e

@@ -8,10 +8,8 @@ class AppointmentNotFoundError(Exception):
 
 
 class AppointmentAlreadyExistsError(Exception):
-    def __init__(self, customer_id: str | None, scheduled_at: str) -> None:
-        super().__init__(
-            f"Customer {customer_id} already has an active appointment at {scheduled_at}"
-        )
+    def __init__(self, subject: str, scheduled_at: str) -> None:
+        super().__init__(f"{subject} already has an active appointment at {scheduled_at}")
 
 
 def register_appointment_exception_handlers(app: FastAPI) -> None:

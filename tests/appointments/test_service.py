@@ -10,6 +10,7 @@ from app.appointments.service import AppointmentHistoryService, AppointmentServi
 from app.companies.model import CompanyUserLink
 from app.companies.service import CompanyUserService
 from app.core.exceptions import ForbiddenError
+from app.customers.exceptions import CustomerAlreadyExistsError
 from app.customers.model import Customer
 from app.users.model import User, UserRole
 
@@ -115,6 +116,7 @@ class FakeAppointmentHistoryRepository:
 class FakeCustomerRepository:
     def __init__(self) -> None:
         self.rows: dict[str, dict[str, Any]] = {}
+        self.simulate_race_once = False
 
     async def get_by_identity(
         self, *, company_id: str, full_name: str, date_of_birth: str
@@ -130,6 +132,23 @@ class FakeCustomerRepository:
         return None
 
     async def create(self, data: dict[str, Any]) -> Customer:
+        if self.simulate_race_once:
+            self.simulate_race_once = False
+            # A concurrent request already promoted this exact lead identity and
+            # committed first — simulate the unique-constraint violation the real
+            # repository would raise, after "someone else's" row lands in rows.
+            now = datetime.now(UTC).isoformat()
+            row = {
+                "id": "race-winner",
+                "updated_by_user_id": None,
+                "created_at": now,
+                "updated_at": now,
+                "deleted_at": None,
+                **data,
+            }
+            self.rows["race-winner"] = row
+            raise CustomerAlreadyExistsError(data["full_name"], data["date_of_birth"])
+
         customer_id = str(len(self.rows) + 1)
         now = datetime.now(UTC).isoformat()
         row = {
@@ -327,6 +346,23 @@ async def test_update_status_completed_reuses_existing_customer(
     )
 
     assert updated.customer_id == existing_customer.id
+    assert len(customer_repository.rows) == 1
+
+
+async def test_update_status_completed_retries_after_concurrent_promotion_race(
+    service: AppointmentService,
+    customer_repository: FakeCustomerRepository,
+    current_user: User,
+) -> None:
+    created = await service.create(_lead_create(), current_user)
+    customer_repository.simulate_race_once = True
+
+    updated = await service.update(
+        created.id, AppointmentUpdate(status=AppointmentStatus.COMPLETED), current_user
+    )
+
+    assert updated.status == AppointmentStatus.COMPLETED
+    assert updated.customer_id == "race-winner"
     assert len(customer_repository.rows) == 1
 
 

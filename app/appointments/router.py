@@ -33,6 +33,12 @@ AppointmentIdPath = Annotated[str, Path(description="UUID do agendamento.")]
         },
         401: {"description": "Token ausente ou inválido."},
         403: {"description": "Usuário não tem acesso à empresa/unidade informada."},
+        409: {
+            "description": (
+                "Este lead (mesmo nome + nascimento, mesma empresa) já tem um agendamento "
+                "ativo neste exato horário."
+            )
+        },
         422: {"description": "Dados inválidos."},
     },
 )

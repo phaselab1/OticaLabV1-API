@@ -1,14 +1,21 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Path, Query, status
+from fastapi import APIRouter, Depends, Path, Query, status
 
 from app.customers.dependencies import CustomerServiceDep
 from app.customers.model import Customer
 from app.customers.schema import CustomerCreate, CustomerResponse, CustomerUpdate
 from app.shared.pagination import Page
-from app.users.dependencies import CurrentUser
+from app.users.dependencies import CurrentUser, require_role
+from app.users.model import User, UserRole
 
 router = APIRouter(prefix="/customers", tags=["customers"])
+
+# attendant não exclui cliente — só cadastra/consulta/atualiza. Excluir é
+# reservado a quem gerencia a unidade/empresa (manager e acima).
+RequireCustomerDeleteRole = Annotated[
+    User, Depends(require_role(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.MANAGER))
+]
 
 
 @router.post(
@@ -126,14 +133,21 @@ async def update_customer(
     summary="Excluir cliente",
     responses={
         401: {"description": "Token ausente ou inválido."},
-        403: {"description": "Usuário não tem acesso à unidade deste cliente."},
+        403: {
+            "description": (
+                "Requer role `super_admin`, `admin` ou `manager` (attendant não pode "
+                "excluir cliente), ou usuário não tem acesso à unidade deste cliente."
+            )
+        },
         404: {"description": "Cliente não encontrado (ou já soft-deletado)."},
     },
 )
 async def delete_customer(
     customer_id: Annotated[str, Path(description="UUID do cliente.")],
     service: CustomerServiceDep,
-    current_user: CurrentUser,
+    current_user: RequireCustomerDeleteRole,
 ) -> None:
-    """Remove um cliente (soft delete). Agendamentos existentes não são afetados."""
+    """Remove um cliente (soft delete). **Exige role `super_admin`, `admin` ou
+    `manager`** — attendant não tem permissão para excluir clientes. Agendamentos
+    existentes não são afetados."""
     await service.delete(customer_id, current_user)

@@ -43,7 +43,6 @@ class FakeAppointmentService:
             company_id=data.company_id or COMPANY_ID,
             company_unit_id=data.company_unit_id or UNIT_ID,
             lead_full_name=data.lead_full_name,
-            lead_date_of_birth=data.lead_date_of_birth,
             lead_phone=data.lead_phone,
             customer_id=None,
             created_by_user_id=current_user.id,
@@ -126,7 +125,6 @@ def client() -> TestClient:
 
 LEAD_PAYLOAD = {
     "lead_full_name": "Ana Silva",
-    "lead_date_of_birth": "1990-01-01",
     "scheduled_at": "2026-01-01T10:00:00Z",
     "company_id": COMPANY_ID,
     "company_unit_id": UNIT_ID,

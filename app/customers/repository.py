@@ -22,7 +22,7 @@ class CustomerRepository:
             response = await self.db.table(TABLE).insert(data).execute()
         except APIError as exc:
             if exc.code == UNIQUE_VIOLATION:
-                raise CustomerAlreadyExistsError(data["full_name"], data["date_of_birth"]) from exc
+                raise CustomerAlreadyExistsError(data["full_name"]) from exc
             raise
         return Customer.from_row(as_row(response.data[0]))
 
@@ -61,15 +61,12 @@ class CustomerRepository:
         response = await query.execute()
         return [row["id"] for row in as_rows(response.data)]
 
-    async def get_by_identity(
-        self, *, company_id: str, full_name: str, date_of_birth: str
-    ) -> Customer | None:
+    async def get_by_identity(self, *, company_id: str, full_name: str) -> Customer | None:
         response = (
             await self.db.table(TABLE)
             .select("*")
             .eq("company_id", company_id)
             .eq("full_name", full_name)
-            .eq("date_of_birth", date_of_birth)
             .is_("deleted_at", "null")
             .maybe_single()
             .execute()
@@ -98,9 +95,7 @@ class CustomerRepository:
             )
         except APIError as exc:
             if exc.code == UNIQUE_VIOLATION:
-                raise CustomerAlreadyExistsError(
-                    data.get("full_name", ""), data.get("date_of_birth", "")
-                ) from exc
+                raise CustomerAlreadyExistsError(data.get("full_name", "")) from exc
             raise
         return Customer.from_row(as_row(response.data[0])) if response.data else None
 

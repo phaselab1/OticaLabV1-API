@@ -23,7 +23,7 @@ Documentação completa da implementação: stack, camadas, modelo de domínio, 
 
 ## Visão geral
 
-Sistema multi-tenant para clínicas/óticas com múltiplas empresas (`companies`) e unidades (`company_units`). Um agendamento (`appointments`) é criado direto numa unidade, com os dados de quem marcou (nome, nascimento, telefone) guardados nele mesmo — ainda como **lead**, sem linha em `customers`. Só quando o agendamento é marcado `completed` (compareceu) é que o lead vira de fato um cliente (veja [De lead a cliente](#de-lead-a-cliente)).
+Sistema multi-tenant para clínicas/óticas com múltiplas empresas (`companies`) e unidades (`company_units`). Um agendamento (`appointments`) é criado direto numa unidade, com os dados de quem marcou (nome, telefone) guardados nele mesmo — ainda como **lead**, sem linha em `customers`. Só quando o agendamento é marcado `completed` (compareceu) é que o lead vira de fato um cliente (veja [De lead a cliente](#de-lead-a-cliente)).
 
 ```
 company (empresa)
@@ -154,7 +154,6 @@ erDiagram
         uuid company_id FK
         uuid company_unit_id FK
         varchar full_name
-        date date_of_birth
         varchar phone
         uuid created_by_user_id FK
         uuid updated_by_user_id FK
@@ -165,7 +164,6 @@ erDiagram
         uuid company_id FK
         uuid company_unit_id FK
         varchar lead_full_name "nome de quem marcou"
-        date lead_date_of_birth
         varchar lead_phone
         uuid customer_id FK "nullable — só após completed"
         uuid created_by_user_id FK
@@ -263,9 +261,11 @@ Sem Alembic — [`db/migrations/0001_initial_schema.sql`](../db/migrations/0001_
 
 [`0003_restore_service_role_access.sql`](../db/migrations/0003_restore_service_role_access.sql) — correção de emergência: nesta instância self-hosted, `service_role` herda privilégios por membresia em `authenticated`/`anon` em vez de ter GRANTs próprios, então o `REVOKE` da `0002` cascateou e cortou o acesso da própria API. Restaura GRANTs explícitos + `BYPASSRLS` para `service_role`, independente de qualquer relação de herança de role.
 
-[`0004_appointment_leads.sql`](../db/migrations/0004_appointment_leads.sql) — base do fluxo de lead descrito em [De lead a cliente](#de-lead-a-cliente): `appointments.customer_id` vira nullable, e `company_id`/`company_unit_id`/`lead_full_name`/`lead_date_of_birth`/`lead_phone` passam a viver direto em `appointments` (antes só existiam via join em `customer_id`). Triggers de validação/autorização reescritos para usar essas colunas próprias; `update_appointment_with_history` ganha o parâmetro `p_customer_id`.
+[`0004_appointment_leads.sql`](../db/migrations/0004_appointment_leads.sql) — base do fluxo de lead descrito em [De lead a cliente](#de-lead-a-cliente): `appointments.customer_id` vira nullable, e `company_id`/`company_unit_id`/`lead_full_name`/`lead_phone` passam a viver direto em `appointments` (antes só existiam via join em `customer_id`). Triggers de validação/autorização reescritos para usar essas colunas próprias; `update_appointment_with_history` ganha o parâmetro `p_customer_id`.
 
-[`0005_appointment_lead_duplicate_guard.sql`](../db/migrations/0005_appointment_lead_duplicate_guard.sql) — a `0004` tornar `customer_id` nullable quebrou silenciosamente `uq_appointments_customer_scheduled_at` para leads (`NULL` nunca colide num índice único), permitindo o mesmo lead ser agendado duas vezes no mesmo horário exato. Restaura essa proteção com um índice único parcial `(company_id, lead_full_name, lead_date_of_birth, scheduled_at) WHERE customer_id IS NULL AND deleted_at IS NULL`.
+[`0005_appointment_lead_duplicate_guard.sql`](../db/migrations/0005_appointment_lead_duplicate_guard.sql) — a `0004` tornar `customer_id` nullable quebrou silenciosamente `uq_appointments_customer_scheduled_at` para leads (`NULL` nunca colide num índice único), permitindo o mesmo lead ser agendado duas vezes no mesmo horário exato. Restaura essa proteção com um índice único parcial `(company_id, lead_full_name, scheduled_at) WHERE customer_id IS NULL AND deleted_at IS NULL`.
+
+[`0006_remove_date_of_birth.sql`](../db/migrations/0006_remove_date_of_birth.sql) — data de nascimento deixa de ser rastreada, tanto em `customers` quanto no lead de `appointments`; a identidade do cliente passa a ser só o nome completo por empresa. **Destrutiva**: qualquer data de nascimento já gravada é perdida ao rodar. Ajusta `uq_customers_company_id_full_name_date_of_birth` → `uq_customers_company_id_full_name` e `uq_appointments_lead_scheduled_at` para não referenciar mais a coluna removida.
 
 ### Rate limiting de login
 
@@ -283,11 +283,11 @@ chamada via `client.rpc(...)` em [`app/appointments/repository.py`](../app/appoi
 
 ### De lead a cliente
 
-`POST /appointments` não recebe `customer_id` — recebe `lead_full_name`/`lead_date_of_birth`/`lead_phone`, guardados direto no agendamento. Enquanto o status não é `completed`, não existe nenhuma linha em `customers`: é só um lead.
+`POST /appointments` não recebe `customer_id` — recebe `lead_full_name`/`lead_phone`, guardados direto no agendamento. Enquanto o status não é `completed`, não existe nenhuma linha em `customers`: é só um lead. Data de nascimento não é (mais) rastreada em nenhum dos dois — removida por completo na migration [`0006`](../db/migrations/0006_remove_date_of_birth.sql); a identidade do cliente passou a ser só o nome completo, por empresa.
 
-Quando `PUT /appointments/{id}` marca `status: "completed"` pela primeira vez, `AppointmentService._promote_lead_to_customer` procura um cliente já existente com o mesmo nome + nascimento nesta empresa (`CustomerRepository.get_by_identity`) — se achar, reaproveita; senão cria um novo — e passa o `customer_id` resultante para `update_appointment_with_history` (parâmetro `p_customer_id`, adicionado na migration [`0004_appointment_leads.sql`](../db/migrations/0004_appointment_leads.sql)), que faz `COALESCE(p_customer_id, customer_id)` no mesmo `UPDATE` do status/histórico. `cancelled`/`no_show` nunca promovem o lead.
+Quando `PUT /appointments/{id}` marca `status: "completed"` pela primeira vez, `AppointmentService._promote_lead_to_customer` procura um cliente já existente com o mesmo nome nesta empresa (`CustomerRepository.get_by_identity`) — se achar, reaproveita; senão cria um novo — e passa o `customer_id` resultante para `update_appointment_with_history` (parâmetro `p_customer_id`, adicionado na migration [`0004_appointment_leads.sql`](../db/migrations/0004_appointment_leads.sql)), que faz `COALESCE(p_customer_id, customer_id)` no mesmo `UPDATE` do status/histórico. `cancelled`/`no_show` nunca promovem o lead.
 
-A busca do cliente existente e a criação/atualização do agendamento são duas chamadas HTTP separadas (limitação do PostgREST — só a segunda parte, `UPDATE` + histórico, é atômica via RPC). Isso deixa uma janela de corrida (TOCTOU): duas completions concorrentes do mesmo lead (mesmo nome + nascimento, mesma empresa) podem passar as duas pelo `SELECT` sem achar nada e colidir no `INSERT`. `AppointmentService._promote_lead_to_customer` trata isso — se o `create` estourar `CustomerAlreadyExistsError`, repete o `get_by_identity` uma vez e reaproveita a linha que a chamada concorrente vencedora acabou de commitar, em vez de propagar o erro. Falha de forma segura mesmo sem esse retry: o agendamento só é atualizado depois da promoção resolver, então nunca fica em estado parcial.
+A busca do cliente existente e a criação/atualização do agendamento são duas chamadas HTTP separadas (limitação do PostgREST — só a segunda parte, `UPDATE` + histórico, é atômica via RPC). Isso deixa uma janela de corrida (TOCTOU): duas completions concorrentes do mesmo lead (mesmo nome, mesma empresa) podem passar as duas pelo `SELECT` sem achar nada e colidir no `INSERT`. `AppointmentService._promote_lead_to_customer` trata isso — se o `create` estourar `CustomerAlreadyExistsError`, repete o `get_by_identity` uma vez e reaproveita a linha que a chamada concorrente vencedora acabou de commitar, em vez de propagar o erro. Falha de forma segura mesmo sem esse retry: o agendamento só é atualizado depois da promoção resolver, então nunca fica em estado parcial.
 
 O agendamento em si também não permite duplicidade: `uq_appointments_lead_scheduled_at` (índice único parcial da migration [`0005`](../db/migrations/0005_appointment_lead_duplicate_guard.sql)) bloqueia o mesmo lead marcando dois horários idênticos antes de ser promovido — espelhando `uq_appointments_customer_scheduled_at`, que já cobria esse caso para clientes.
 

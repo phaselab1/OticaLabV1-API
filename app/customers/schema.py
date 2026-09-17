@@ -1,4 +1,4 @@
-from datetime import date, datetime
+from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -9,7 +9,6 @@ class CustomerCreate(BaseModel):
     full_name: str = Field(
         max_length=255, description="Nome completo do cliente.", examples=["Bruno Souza"]
     )
-    date_of_birth: date = Field(description="Data de nascimento.", examples=["1990-05-20"])
     phone: str | None = Field(
         default=None,
         pattern=PHONE_PATTERN,
@@ -38,9 +37,6 @@ class CustomerUpdate(BaseModel):
     full_name: str | None = Field(
         default=None, max_length=255, description="Novo nome, se for alterar."
     )
-    date_of_birth: date | None = Field(
-        default=None, description="Nova data de nascimento, se for alterar."
-    )
     phone: str | None = Field(
         default=None, pattern=PHONE_PATTERN, description="Novo telefone, se for alterar."
     )
@@ -53,7 +49,6 @@ class CustomerResponse(BaseModel):
         description="Unidade de cadastro — também a unidade de todos os agendamentos deste cliente."
     )
     full_name: str
-    date_of_birth: date
     phone: str | None
     created_by_user_id: str = Field(description="UUID de quem cadastrou o cliente. Nunca muda.")
     updated_by_user_id: str | None = Field(

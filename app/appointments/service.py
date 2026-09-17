@@ -78,14 +78,11 @@ class AppointmentService:
 
     async def _promote_lead_to_customer(self, appointment: Appointment, current_user: User) -> str:
         """Vira o lead do agendamento em cliente de verdade (ou reaproveita um já existente
-        com o mesmo nome + nascimento nesta empresa), na primeira vez que o agendamento é
-        marcado como `completed`."""
-        date_of_birth = appointment.lead_date_of_birth.isoformat()
-
+        com o mesmo nome nesta empresa), na primeira vez que o agendamento é marcado como
+        `completed`."""
         existing_customer = await self.customer_repository.get_by_identity(
             company_id=appointment.company_id,
             full_name=appointment.lead_full_name,
-            date_of_birth=date_of_birth,
         )
         if existing_customer is not None:
             return existing_customer.id
@@ -96,7 +93,6 @@ class AppointmentService:
                     "company_id": appointment.company_id,
                     "company_unit_id": appointment.company_unit_id,
                     "full_name": appointment.lead_full_name,
-                    "date_of_birth": date_of_birth,
                     "phone": appointment.lead_phone,
                     "created_by_user_id": current_user.id,
                 }
@@ -108,7 +104,6 @@ class AppointmentService:
             existing_customer = await self.customer_repository.get_by_identity(
                 company_id=appointment.company_id,
                 full_name=appointment.lead_full_name,
-                date_of_birth=date_of_birth,
             )
             if existing_customer is None:
                 raise

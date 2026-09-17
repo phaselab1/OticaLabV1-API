@@ -8,8 +8,8 @@ class CustomerNotFoundError(Exception):
 
 
 class CustomerAlreadyExistsError(Exception):
-    def __init__(self, full_name: str, date_of_birth: str) -> None:
-        super().__init__(f"Customer '{full_name}' born {date_of_birth} already exists")
+    def __init__(self, full_name: str) -> None:
+        super().__init__(f"Customer '{full_name}' already exists")
 
 
 def register_customer_exception_handlers(app: FastAPI) -> None:

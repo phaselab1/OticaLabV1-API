@@ -41,7 +41,6 @@ class FakeCustomerService:
             company_id=data.company_id or "company-a",
             company_unit_id=data.company_unit_id or "unit-a1",
             full_name=data.full_name,
-            date_of_birth=data.date_of_birth,
             phone=data.phone,
             created_by_user_id=current_user.id,
             updated_by_user_id=None,
@@ -92,7 +91,6 @@ def test_create_customer_requires_auth(client: TestClient) -> None:
         "/customers/",
         json={
             "full_name": "Ana Silva",
-            "date_of_birth": "1990-01-01",
             "company_id": "company-a",
             "company_unit_id": "unit-a1",
         },
@@ -106,7 +104,6 @@ def test_create_customer(client: TestClient) -> None:
         "/customers/",
         json={
             "full_name": "Ana Silva",
-            "date_of_birth": "1990-01-01",
             "company_id": "company-a",
             "company_unit_id": "unit-a1",
         },
@@ -122,7 +119,6 @@ def test_create_customer_invalid_phone_rejected(client: TestClient) -> None:
         "/customers/",
         json={
             "full_name": "Ana Silva",
-            "date_of_birth": "1990-01-01",
             "company_id": "company-a",
             "company_unit_id": "unit-a1",
             "phone": "123",
@@ -143,7 +139,6 @@ def test_full_crud_flow(client: TestClient) -> None:
         "/customers/",
         json={
             "full_name": "Bruno Souza",
-            "date_of_birth": "1985-05-05",
             "company_id": "company-a",
             "company_unit_id": "unit-a1",
         },

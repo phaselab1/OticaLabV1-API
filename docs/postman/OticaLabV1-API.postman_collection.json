@@ -754,6 +754,71 @@
           ]
         },
         {
+          "name": "List users - sem token (401)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/users/",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "users",
+                ""
+              ]
+            },
+            "description": "Exemplo de falha: nenhum token enviado. O mesmo vale pra qualquer rota protegida da API — todas exigem `Authorization: Bearer <token>`.",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": [
+            {
+              "name": "401 example",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/users/",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "users",
+                    ""
+                  ]
+                },
+                "description": "Exemplo de falha: nenhum token enviado. O mesmo vale pra qualquer rota protegida da API — todas exigem `Authorization: Bearer <token>`.",
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "status": "OK",
+              "code": 401,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n    \"detail\": \"Not authenticated\"\n}"
+            }
+          ],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 401\", function () { pm.response.to.have.status(401); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
           "name": "List users",
           "request": {
             "method": "GET",
@@ -884,6 +949,65 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test(\"Status code is 200\", function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get user by ID - não encontrado (404)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/users/00000000-0000-4000-8000-000000000099",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "users",
+                "00000000-0000-4000-8000-000000000099"
+              ]
+            },
+            "description": "Exemplo de falha: usuário com esse UUID não existe (ou já foi soft-deletado)."
+          },
+          "response": [
+            {
+              "name": "404 example",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/users/00000000-0000-4000-8000-000000000099",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "users",
+                    "00000000-0000-4000-8000-000000000099"
+                  ]
+                },
+                "description": "Exemplo de falha: usuário com esse UUID não existe (ou já foi soft-deletado)."
+              },
+              "status": "OK",
+              "code": 404,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n    \"detail\": \"Resource not found\"\n}"
+            }
+          ],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 404\", function () { pm.response.to.have.status(404); });"
                 ]
               }
             }
@@ -1310,6 +1434,65 @@
           ]
         },
         {
+          "name": "Get company by ID - não encontrada (404)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/companies/00000000-0000-4000-8000-000000000099",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "companies",
+                "00000000-0000-4000-8000-000000000099"
+              ]
+            },
+            "description": "Exemplo de falha: empresa com esse UUID não existe (ou já foi soft-deletada)."
+          },
+          "response": [
+            {
+              "name": "404 example",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/companies/00000000-0000-4000-8000-000000000099",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "companies",
+                    "00000000-0000-4000-8000-000000000099"
+                  ]
+                },
+                "description": "Exemplo de falha: empresa com esse UUID não existe (ou já foi soft-deletada)."
+              },
+              "status": "OK",
+              "code": 404,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n    \"detail\": \"Resource not found\"\n}"
+            }
+          ],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 404\", function () { pm.response.to.have.status(404); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
           "name": "Update company",
           "request": {
             "method": "PUT",
@@ -1482,6 +1665,95 @@
           ]
         },
         {
+          "name": "Create company unit - empresa inexistente (404)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/companies/00000000-0000-4000-8000-000000000099/units",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "companies",
+                "00000000-0000-4000-8000-000000000099",
+                "units"
+              ]
+            },
+            "description": "Exemplo de falha: `company_id` no path com UUID bem formado mas que não existe.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"name\": \"Fantasma\",\n    \"code\": \"GHO\",\n    \"cnpj\": \"00000000000199\",\n    \"state\": \"SP\",\n    \"city\": \"SP\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [
+            {
+              "name": "404 example",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/companies/00000000-0000-4000-8000-000000000099/units",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "companies",
+                    "00000000-0000-4000-8000-000000000099",
+                    "units"
+                  ]
+                },
+                "description": "Exemplo de falha: `company_id` no path com UUID bem formado mas que não existe.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n    \"name\": \"Fantasma\",\n    \"code\": \"GHO\",\n    \"cnpj\": \"00000000000199\",\n    \"state\": \"SP\",\n    \"city\": \"SP\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "OK",
+              "code": 404,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n    \"detail\": \"Company 00000000-0000-4000-8000-000000000099 not found\"\n}"
+            }
+          ],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 404\", function () { pm.response.to.have.status(404); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
           "name": "Create company unit",
           "request": {
             "method": "POST",
@@ -1566,6 +1838,95 @@
                 "exec": [
                   "pm.test(\"Status code is 201\", function () { pm.response.to.have.status(201); });",
                   "if (pm.response.code < 300) { const body = pm.response.json(); pm.collectionVariables.set(\"unit_id\", body.id); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create company unit - código duplicado (409)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/companies/{{company_id}}/units",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "companies",
+                "{{company_id}}",
+                "units"
+              ]
+            },
+            "description": "Exemplo de falha: já existe uma unidade ativa com esse `code` nesta mesma empresa (o `cnpj` também é único, mas testamos o code aqui pra variar o cenário).",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"name\": \"Unidade Argentina 2\",\n    \"code\": \"ARG\",\n    \"cnpj\": \"900002{{run_suffix}}\",\n    \"state\": \"SP\",\n    \"city\": \"São Paulo\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [
+            {
+              "name": "409 example",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/companies/{{company_id}}/units",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "companies",
+                    "{{company_id}}",
+                    "units"
+                  ]
+                },
+                "description": "Exemplo de falha: já existe uma unidade ativa com esse `code` nesta mesma empresa (o `cnpj` também é único, mas testamos o code aqui pra variar o cenário).",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n    \"name\": \"Unidade Argentina 2\",\n    \"code\": \"ARG\",\n    \"cnpj\": \"900002{{run_suffix}}\",\n    \"state\": \"SP\",\n    \"city\": \"São Paulo\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "OK",
+              "code": 409,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n    \"detail\": \"Unit code or CNPJ already exists for this company\"\n}"
+            }
+          ],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 409\", function () { pm.response.to.have.status(409); });"
                 ]
               }
             }
@@ -1710,6 +2071,69 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test(\"Status code is 200\", function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get unit by ID - não encontrada (404)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/companies/{{company_id}}/units/00000000-0000-4000-8000-000000000099",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "companies",
+                "{{company_id}}",
+                "units",
+                "00000000-0000-4000-8000-000000000099"
+              ]
+            },
+            "description": "Exemplo de falha: unidade com esse UUID não existe (ou já foi soft-deletada)."
+          },
+          "response": [
+            {
+              "name": "404 example",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/companies/{{company_id}}/units/00000000-0000-4000-8000-000000000099",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "companies",
+                    "{{company_id}}",
+                    "units",
+                    "00000000-0000-4000-8000-000000000099"
+                  ]
+                },
+                "description": "Exemplo de falha: unidade com esse UUID não existe (ou já foi soft-deletada)."
+              },
+              "status": "OK",
+              "code": 404,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n    \"detail\": \"Resource not found\"\n}"
+            }
+          ],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 404\", function () { pm.response.to.have.status(404); });"
                 ]
               }
             }
@@ -2449,6 +2873,93 @@
           ]
         },
         {
+          "name": "Create customer - empresa/unidade inexistente (400)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/customers/",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "customers",
+                ""
+              ]
+            },
+            "description": "Exemplo de falha: `company_id`/`company_unit_id` com UUID bem formado mas que não existe — a trigger `enforce_customer_parents_valid` rejeita antes de chegar na FK (a unidade inexistente não pertence à empresa informada, também inexistente), então vira 400 (regra de negócio), não 404.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"full_name\": \"Fantasma\",\n    \"company_id\": \"00000000-0000-4000-8000-000000000099\",\n    \"company_unit_id\": \"00000000-0000-4000-8000-000000000099\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [
+            {
+              "name": "400 example",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/customers/",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "customers",
+                    ""
+                  ]
+                },
+                "description": "Exemplo de falha: `company_id`/`company_unit_id` com UUID bem formado mas que não existe — a trigger `enforce_customer_parents_valid` rejeita antes de chegar na FK (a unidade inexistente não pertence à empresa informada, também inexistente), então vira 400 (regra de negócio), não 404.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n    \"full_name\": \"Fantasma\",\n    \"company_id\": \"00000000-0000-4000-8000-000000000099\",\n    \"company_unit_id\": \"00000000-0000-4000-8000-000000000099\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "Bad Request",
+              "code": 400,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n    \"detail\": \"unit 00000000-0000-4000-8000-000000000099 does not belong to company 00000000-0000-4000-8000-000000000099\"\n}"
+            }
+          ],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 400\", function () { pm.response.to.have.status(400); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
           "name": "Create customer - telefone inválido (422)",
           "request": {
             "method": "POST",
@@ -2684,6 +3195,65 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test(\"Status code is 200\", function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get customer by ID - não encontrado (404)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/customers/00000000-0000-4000-8000-000000000099",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "customers",
+                "00000000-0000-4000-8000-000000000099"
+              ]
+            },
+            "description": "Exemplo de falha: cliente com esse UUID não existe (ou já foi soft-deletado)."
+          },
+          "response": [
+            {
+              "name": "404 example",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/customers/00000000-0000-4000-8000-000000000099",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "customers",
+                    "00000000-0000-4000-8000-000000000099"
+                  ]
+                },
+                "description": "Exemplo de falha: cliente com esse UUID não existe (ou já foi soft-deletado)."
+              },
+              "status": "OK",
+              "code": 404,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n    \"detail\": \"Resource not found\"\n}"
+            }
+          ],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 404\", function () { pm.response.to.have.status(404); });"
                 ]
               }
             }
@@ -3369,6 +3939,65 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test(\"Status code is 200\", function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get appointment by ID - não encontrado (404)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/appointments/00000000-0000-4000-8000-000000000099",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "appointments",
+                "00000000-0000-4000-8000-000000000099"
+              ]
+            },
+            "description": "Exemplo de falha: agendamento com esse UUID não existe (ou já foi soft-deletado)."
+          },
+          "response": [
+            {
+              "name": "404 example",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/appointments/00000000-0000-4000-8000-000000000099",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "appointments",
+                    "00000000-0000-4000-8000-000000000099"
+                  ]
+                },
+                "description": "Exemplo de falha: agendamento com esse UUID não existe (ou já foi soft-deletado)."
+              },
+              "status": "OK",
+              "code": 404,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n    \"detail\": \"Resource not found\"\n}"
+            }
+          ],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 404\", function () { pm.response.to.have.status(404); });"
                 ]
               }
             }

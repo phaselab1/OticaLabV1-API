@@ -26,9 +26,7 @@ router = APIRouter(prefix="/customers", tags=["customers"])
         401: {"description": "Token ausente ou inválido."},
         403: {"description": "Usuário não tem acesso à empresa/unidade informada."},
         404: {"description": "Empresa ou unidade informada não encontrada."},
-        409: {
-            "description": "Já existe um cliente ativo com esse nome + nascimento nesta empresa."
-        },
+        409: {"description": "Já existe um cliente ativo com esse nome nesta empresa."},
         422: {"description": "Dados inválidos (ex: telefone fora do formato)."},
     },
 )
@@ -105,9 +103,7 @@ async def get_customer(
         401: {"description": "Token ausente ou inválido."},
         403: {"description": "Usuário não tem acesso à unidade deste cliente."},
         404: {"description": "Cliente não encontrado (ou soft-deletado)."},
-        409: {
-            "description": "Novo nome + nascimento já pertence a outro cliente ativo nesta empresa."
-        },
+        409: {"description": "Novo nome já pertence a outro cliente ativo nesta empresa."},
     },
 )
 async def update_customer(

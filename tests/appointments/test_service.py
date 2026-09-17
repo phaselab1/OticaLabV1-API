@@ -1,4 +1,4 @@
-from datetime import UTC, date, datetime
+from datetime import UTC, datetime
 from typing import Any
 
 import pytest
@@ -17,7 +17,6 @@ from app.users.model import User, UserRole
 COMPANY_ID = "company-a"
 UNIT_ID = "unit-a1"
 LEAD_NAME = "Ana Silva"
-LEAD_DOB = date(1990, 1, 1)
 
 
 class FakeAppointmentRepository:
@@ -118,15 +117,12 @@ class FakeCustomerRepository:
         self.rows: dict[str, dict[str, Any]] = {}
         self.simulate_race_once = False
 
-    async def get_by_identity(
-        self, *, company_id: str, full_name: str, date_of_birth: str
-    ) -> Customer | None:
+    async def get_by_identity(self, *, company_id: str, full_name: str) -> Customer | None:
         for row in self.rows.values():
             if (
                 row["deleted_at"] is None
                 and row["company_id"] == company_id
                 and row["full_name"] == full_name
-                and row["date_of_birth"] == date_of_birth
             ):
                 return Customer.from_row(row)
         return None
@@ -147,7 +143,7 @@ class FakeCustomerRepository:
                 **data,
             }
             self.rows["race-winner"] = row
-            raise CustomerAlreadyExistsError(data["full_name"], data["date_of_birth"])
+            raise CustomerAlreadyExistsError(data["full_name"])
 
         customer_id = str(len(self.rows) + 1)
         now = datetime.now(UTC).isoformat()
@@ -197,7 +193,6 @@ def _link(user_id: str, company_id: str, unit_id: str | None) -> CompanyUserLink
 def _lead_create(**overrides: Any) -> AppointmentCreate:
     data = {
         "lead_full_name": LEAD_NAME,
-        "lead_date_of_birth": LEAD_DOB,
         "scheduled_at": datetime.now(UTC),
         **overrides,
     }
@@ -247,7 +242,6 @@ async def test_create_appointment_as_lead(service: AppointmentService, current_u
     created = await service.create(_lead_create(), current_user)
 
     assert created.lead_full_name == LEAD_NAME
-    assert created.lead_date_of_birth == LEAD_DOB
     assert created.customer_id is None
     assert created.company_id == COMPANY_ID
     assert created.company_unit_id == UNIT_ID
@@ -334,7 +328,6 @@ async def test_update_status_completed_reuses_existing_customer(
             "company_id": COMPANY_ID,
             "company_unit_id": UNIT_ID,
             "full_name": LEAD_NAME,
-            "date_of_birth": LEAD_DOB.isoformat(),
             "phone": None,
             "created_by_user_id": current_user.id,
         }

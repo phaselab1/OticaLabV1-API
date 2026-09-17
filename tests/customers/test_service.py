@@ -1,4 +1,4 @@
-from datetime import UTC, date, datetime
+from datetime import UTC, datetime
 from typing import Any
 
 import pytest
@@ -28,9 +28,8 @@ class FakeCustomerRepository:
                 row["deleted_at"] is None
                 and row["company_id"] == data["company_id"]
                 and row["full_name"] == data["full_name"]
-                and row["date_of_birth"] == data["date_of_birth"]
             ):
-                raise CustomerAlreadyExistsError(data["full_name"], data["date_of_birth"])
+                raise CustomerAlreadyExistsError(data["full_name"])
 
         customer_id = str(len(self.rows) + 1)
         now = datetime.now(UTC).isoformat()
@@ -123,7 +122,6 @@ async def test_super_admin_must_provide_company_and_unit() -> None:
     created = await service.create(
         CustomerCreate(
             full_name="Ana",
-            date_of_birth=date(1990, 1, 1),
             company_id=COMPANY_A,
             company_unit_id=UNIT_A1,
         ),
@@ -142,7 +140,12 @@ async def test_super_admin_without_company_or_unit_raises() -> None:
     user = _user(UserRole.SUPER_ADMIN)
 
     with pytest.raises(CompanyOrUnitRequiredError):
-        await service.create(CustomerCreate(full_name="Ana", date_of_birth=date(1990, 1, 1)), user)
+        await service.create(
+            CustomerCreate(
+                full_name="Ana",
+            ),
+            user,
+        )
 
 
 async def test_admin_gets_company_auto_filled_but_must_choose_unit() -> None:
@@ -153,10 +156,15 @@ async def test_admin_gets_company_auto_filled_but_must_choose_unit() -> None:
     service = _service(repo)
 
     with pytest.raises(CompanyOrUnitRequiredError):
-        await service.create(CustomerCreate(full_name="Ana", date_of_birth=date(1990, 1, 1)), user)
+        await service.create(
+            CustomerCreate(
+                full_name="Ana",
+            ),
+            user,
+        )
 
     created = await service.create(
-        CustomerCreate(full_name="Ana", date_of_birth=date(1990, 1, 1), company_unit_id=UNIT_A1),
+        CustomerCreate(full_name="Ana", company_unit_id=UNIT_A1),
         user,
     )
     assert created.company_id == COMPANY_A
@@ -169,7 +177,10 @@ async def test_attendant_with_single_unit_gets_both_auto_filled() -> None:
     service = _service(repo)
 
     created = await service.create(
-        CustomerCreate(full_name="Ana", date_of_birth=date(1990, 1, 1)), user
+        CustomerCreate(
+            full_name="Ana",
+        ),
+        user,
     )
 
     assert created.company_id == COMPANY_A
@@ -186,7 +197,12 @@ async def test_attendant_with_multiple_units_must_choose() -> None:
     service = _service(repo)
 
     with pytest.raises(CompanyOrUnitRequiredError):
-        await service.create(CustomerCreate(full_name="Ana", date_of_birth=date(1990, 1, 1)), user)
+        await service.create(
+            CustomerCreate(
+                full_name="Ana",
+            ),
+            user,
+        )
 
 
 async def test_attendant_with_no_access_to_requested_company_forbidden() -> None:
@@ -198,7 +214,6 @@ async def test_attendant_with_no_access_to_requested_company_forbidden() -> None
         await service.create(
             CustomerCreate(
                 full_name="Ana",
-                date_of_birth=date(1990, 1, 1),
                 company_id=COMPANY_B,
                 company_unit_id="x",
             ),
@@ -219,7 +234,10 @@ async def test_update_requires_unit_access() -> None:
     service = _service(repo)
 
     created = await service.create(
-        CustomerCreate(full_name="Ana", date_of_birth=date(1990, 1, 1)), creator
+        CustomerCreate(
+            full_name="Ana",
+        ),
+        creator,
     )
 
     outsider = _user(UserRole.ATTENDANT, user_id="user-2")

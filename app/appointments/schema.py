@@ -1,4 +1,4 @@
-from datetime import date, datetime
+from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -14,10 +14,6 @@ class AppointmentCreate(BaseModel):
             "não gera linha em `customers` até o agendamento ser marcado `completed`."
         ),
         examples=["Bruno Souza"],
-    )
-    lead_date_of_birth: date = Field(
-        description="Data de nascimento de quem está marcando o horário.",
-        examples=["1990-05-20"],
     )
     lead_phone: str | None = Field(
         default=None,
@@ -58,8 +54,8 @@ class AppointmentUpdate(BaseModel):
         default=None,
         description=(
             "Novo status, se for alterar. Marcar `completed` (compareceu) promove o lead a "
-            "cliente de verdade: cria (ou reaproveita, se já existir pelo nome + nascimento "
-            "na empresa) a linha em `customers` e liga `customer_id` automaticamente."
+            "cliente de verdade: cria (ou reaproveita, se já existir pelo nome nesta empresa) "
+            "a linha em `customers` e liga `customer_id` automaticamente."
         ),
     )
     notes: str | None = Field(
@@ -85,7 +81,6 @@ class AppointmentResponse(BaseModel):
     company_id: str
     company_unit_id: str
     lead_full_name: str = Field(description="Nome informado ao marcar o horário.")
-    lead_date_of_birth: date = Field(description="Data de nascimento informada ao marcar.")
     lead_phone: str | None = Field(description="Telefone informado ao marcar.")
     customer_id: str | None = Field(
         description=(

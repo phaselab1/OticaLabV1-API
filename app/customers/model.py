@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import datetime
 from typing import Any
 
 
@@ -9,7 +9,6 @@ class Customer:
     company_id: str
     company_unit_id: str
     full_name: str
-    date_of_birth: date
     phone: str | None
     created_by_user_id: str
     updated_by_user_id: str | None
@@ -24,7 +23,6 @@ class Customer:
             company_id=row["company_id"],
             company_unit_id=row["company_unit_id"],
             full_name=row["full_name"],
-            date_of_birth=date.fromisoformat(row["date_of_birth"]),
             phone=row.get("phone"),
             created_by_user_id=row["created_by_user_id"],
             updated_by_user_id=row.get("updated_by_user_id"),

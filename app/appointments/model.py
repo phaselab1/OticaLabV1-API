@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import datetime
 from enum import StrEnum
 from typing import Any
 
@@ -20,7 +20,6 @@ class Appointment:
     # Quem marcou o horário, antes de virar cliente. Preenchido sempre, mesmo
     # depois de customer_id ser setado (histórico do que foi informado na hora).
     lead_full_name: str
-    lead_date_of_birth: date
     lead_phone: str | None
     # Nulo até o agendamento ser marcado como `completed` (compareceu) — só
     # nesse momento o lead vira de fato um registro em `customers`.
@@ -41,7 +40,6 @@ class Appointment:
             company_id=row["company_id"],
             company_unit_id=row["company_unit_id"],
             lead_full_name=row["lead_full_name"],
-            lead_date_of_birth=date.fromisoformat(row["lead_date_of_birth"]),
             lead_phone=row.get("lead_phone"),
             customer_id=row.get("customer_id"),
             created_by_user_id=row["created_by_user_id"],

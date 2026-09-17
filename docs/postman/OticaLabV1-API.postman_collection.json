@@ -2,7 +2,7 @@
   "info": {
     "_postman_id": "7a7cecfd-d620-4f2b-9168-f15921fc362b",
     "name": "Ótica Lab API",
-    "description": "API do Ótica Lab — sistema multi-tenant para clínicas/óticas com múltiplas empresas e unidades.\n\n## Como usar esta coleção\n\n1. Ajuste `base_url` (variável de coleção) para onde sua API está rodando.\n2. Preencha `login_email`/`login_password` com um usuário `super_admin`    existente (o primeiro é inserido manualmente no banco — veja    `db/migrations/README.md`).\n3. Rode **Auth > Login** — o token é salvo automaticamente em `access_token`    e reutilizado por todas as pastas seguintes (autenticação em nível de    coleção, tipo Bearer).\n4. As pastas seguem a ordem de dependência do domínio: Users -> Companies    (empresa -> unidade -> conceder acesso) -> Customers -> Appointments.    Cada request de criação salva o ID retornado numa variável de coleção    (`company_id`, `unit_id`, `customer_id`, `appointment_id`, etc.),    reutilizada automaticamente pelas próximas requisições — rode as pastas    em ordem, de cima para baixo, para popular a cadeia toda.\n5. Todo DELETE/revoke fica na última pasta, **Cleanup** — rode-a por    último. Não fica espalhado nas pastas de criação porque o runner do    Postman executa cada pasta inteira antes de passar pra próxima, e    Customers/Appointments ainda precisam da empresa/unidade existirem.\n\n## Hierarquia\n\n```\ncompany (empresa)\n  -> company_unit (unidade/filial)\n        -> appointment (agendamento — empresa/unidade próprias, cliente opcional)\n        -> customer (cliente — cadastro direto OU criado ao completar um agendamento)\n```\n\nUm agendamento (`appointments`) começa como LEAD: nome, nascimento e telefone de\nquem está marcando ficam guardados nele mesmo, sem nenhuma linha em `customers`.\nSó quando o agendamento é marcado `completed` (compareceu) é que a API cria (ou\nreaproveita, se já existir pelo nome+nascimento na empresa) o cliente de fato.\n`cancelled`/`no_show` nunca geram cliente.\n\n## Papéis (roles)\n\n- **super_admin** — acesso global; deve informar `company_id`/`company_unit_id`   explicitamente ao cadastrar cliente.\n- **admin** — acesso a toda a empresa vinculada; empresa automática, unidade   ainda precisa ser escolhida.\n- **manager** — acesso a UMA unidade específica, nunca à empresa inteira   (reforçado por trigger no banco).\n- **attendant** — empresa inteira ou unidade(s) específica(s); automático se   vinculado a exatamente uma unidade.\n\nRequests de exemplo de erro (401/403/404/409/422/400) estão incluídos em cada pasta para documentar o comportamento completo da API, não só o caminho feliz.",
+    "description": "API do Ótica Lab — sistema multi-tenant para clínicas/óticas com múltiplas empresas e unidades.\n\n## Como usar esta coleção\n\n1. Ajuste `base_url` (variável de coleção) para onde sua API está rodando.\n2. Preencha `login_email`/`login_password` com um usuário `super_admin`    existente (o primeiro é inserido manualmente no banco — veja    `db/migrations/README.md`).\n3. Rode **Auth > Login** — o token é salvo automaticamente em `access_token`    e reutilizado por todas as pastas seguintes (autenticação em nível de    coleção, tipo Bearer).\n4. As pastas seguem a ordem de dependência do domínio: Users -> Companies    (empresa -> unidade -> conceder acesso) -> Customers -> Appointments.    Cada request de criação salva o ID retornado numa variável de coleção    (`company_id`, `unit_id`, `customer_id`, `appointment_id`, etc.),    reutilizada automaticamente pelas próximas requisições — rode as pastas    em ordem, de cima para baixo, para popular a cadeia toda.\n5. Todo DELETE/revoke fica na última pasta, **Cleanup** — rode-a por    último. Não fica espalhado nas pastas de criação porque o runner do    Postman executa cada pasta inteira antes de passar pra próxima, e    Customers/Appointments ainda precisam da empresa/unidade existirem.\n\n## Hierarquia\n\n```\ncompany (empresa)\n  -> company_unit (unidade/filial)\n        -> appointment (agendamento — empresa/unidade próprias, cliente opcional)\n        -> customer (cliente — cadastro direto OU criado ao completar um agendamento)\n```\n\nUm agendamento (`appointments`) começa como LEAD: nome e telefone de quem está\nmarcando ficam guardados nele mesmo, sem nenhuma linha em `customers`.\nSó quando o agendamento é marcado `completed` (compareceu) é que a API cria (ou\nreaproveita, se já existir pelo nome na empresa) o cliente de fato.\n`cancelled`/`no_show` nunca geram cliente.\n\n## Papéis (roles)\n\n- **super_admin** — acesso global; deve informar `company_id`/`company_unit_id`   explicitamente ao cadastrar cliente.\n- **admin** — acesso a toda a empresa vinculada; empresa automática, unidade   ainda precisa ser escolhida.\n- **manager** — acesso a UMA unidade específica, nunca à empresa inteira   (reforçado por trigger no banco).\n- **attendant** — empresa inteira ou unidade(s) específica(s); automático se   vinculado a exatamente uma unidade.\n\nRequests de exemplo de erro (401/403/404/409/422/400) estão incluídos em cada pasta para documentar o comportamento completo da API, não só o caminho feliz.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "auth": {
@@ -2278,7 +2278,7 @@
             "description": "Cadastra um cliente informando `company_id`/`company_unit_id` explicitamente — obrigatório quando o usuário autenticado é `super_admin`.",
             "body": {
               "mode": "raw",
-              "raw": "{\n    \"full_name\": \"Bruno Souza\",\n    \"date_of_birth\": \"1990-05-20\",\n    \"phone\": \"11987654321\",\n    \"company_id\": \"{{company_id}}\",\n    \"company_unit_id\": \"{{unit_id}}\"\n}",
+              "raw": "{\n    \"full_name\": \"Bruno Souza\",\n    \"phone\": \"11987654321\",\n    \"company_id\": \"{{company_id}}\",\n    \"company_unit_id\": \"{{unit_id}}\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -2309,7 +2309,7 @@
                 "description": "Cadastra um cliente informando `company_id`/`company_unit_id` explicitamente — obrigatório quando o usuário autenticado é `super_admin`.",
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n    \"full_name\": \"Bruno Souza\",\n    \"date_of_birth\": \"1990-05-20\",\n    \"phone\": \"11987654321\",\n    \"company_id\": \"{{company_id}}\",\n    \"company_unit_id\": \"{{unit_id}}\"\n}",
+                  "raw": "{\n    \"full_name\": \"Bruno Souza\",\n    \"phone\": \"11987654321\",\n    \"company_id\": \"{{company_id}}\",\n    \"company_unit_id\": \"{{unit_id}}\"\n}",
                   "options": {
                     "raw": {
                       "language": "json"
@@ -2326,7 +2326,7 @@
                   "value": "application/json"
                 }
               ],
-              "body": "{\n    \"id\": \"e1a2c3d4-0000-4000-8000-000000000004\",\n    \"company_id\": \"b1a2c3d4-0000-4000-8000-000000000001\",\n    \"company_unit_id\": \"c1a2c3d4-0000-4000-8000-000000000002\",\n    \"full_name\": \"Bruno Souza\",\n    \"date_of_birth\": \"1990-05-20\",\n    \"phone\": \"11987654321\",\n    \"created_by_user_id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n    \"updated_by_user_id\": null,\n    \"created_at\": \"2026-01-01T12:00:00Z\",\n    \"updated_at\": \"2026-01-01T12:00:00Z\"\n}"
+              "body": "{\n    \"id\": \"e1a2c3d4-0000-4000-8000-000000000004\",\n    \"company_id\": \"b1a2c3d4-0000-4000-8000-000000000001\",\n    \"company_unit_id\": \"c1a2c3d4-0000-4000-8000-000000000002\",\n    \"full_name\": \"Bruno Souza\",\n    \"phone\": \"11987654321\",\n    \"created_by_user_id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n    \"updated_by_user_id\": null,\n    \"created_at\": \"2026-01-01T12:00:00Z\",\n    \"updated_at\": \"2026-01-01T12:00:00Z\"\n}"
             }
           ],
           "event": [
@@ -2364,7 +2364,7 @@
             "description": "Cadastra um cliente SEM informar empresa/unidade, autenticado como o `manager` (token de 'Login as manager' na pasta Companies) — como ele só tem acesso a UMA unidade específica, `company_id`/`company_unit_id` são deduzidos automaticamente do vínculo. `super_admin` nunca tem esse auto-preenchimento (deve sempre informar os dois explicitamente).",
             "body": {
               "mode": "raw",
-              "raw": "{\n    \"full_name\": \"Carla Mendes\",\n    \"date_of_birth\": \"1985-03-10\",\n    \"phone\": \"11912345678\"\n}",
+              "raw": "{\n    \"full_name\": \"Carla Mendes\",\n    \"phone\": \"11912345678\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -2405,7 +2405,7 @@
                 "description": "Cadastra um cliente SEM informar empresa/unidade, autenticado como o `manager` (token de 'Login as manager' na pasta Companies) — como ele só tem acesso a UMA unidade específica, `company_id`/`company_unit_id` são deduzidos automaticamente do vínculo. `super_admin` nunca tem esse auto-preenchimento (deve sempre informar os dois explicitamente).",
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n    \"full_name\": \"Carla Mendes\",\n    \"date_of_birth\": \"1985-03-10\",\n    \"phone\": \"11912345678\"\n}",
+                  "raw": "{\n    \"full_name\": \"Carla Mendes\",\n    \"phone\": \"11912345678\"\n}",
                   "options": {
                     "raw": {
                       "language": "json"
@@ -2432,7 +2432,7 @@
                   "value": "application/json"
                 }
               ],
-              "body": "{\n    \"id\": \"e1a2c3d4-0000-4000-8000-000000000004\",\n    \"company_id\": \"b1a2c3d4-0000-4000-8000-000000000001\",\n    \"company_unit_id\": \"c1a2c3d4-0000-4000-8000-000000000002\",\n    \"full_name\": \"Carla Mendes\",\n    \"date_of_birth\": \"1990-05-20\",\n    \"phone\": \"11987654321\",\n    \"created_by_user_id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n    \"updated_by_user_id\": null,\n    \"created_at\": \"2026-01-01T12:00:00Z\",\n    \"updated_at\": \"2026-01-01T12:00:00Z\"\n}"
+              "body": "{\n    \"id\": \"e1a2c3d4-0000-4000-8000-000000000004\",\n    \"company_id\": \"b1a2c3d4-0000-4000-8000-000000000001\",\n    \"company_unit_id\": \"c1a2c3d4-0000-4000-8000-000000000002\",\n    \"full_name\": \"Carla Mendes\",\n    \"phone\": \"11987654321\",\n    \"created_by_user_id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n    \"updated_by_user_id\": null,\n    \"created_at\": \"2026-01-01T12:00:00Z\",\n    \"updated_at\": \"2026-01-01T12:00:00Z\"\n}"
             }
           ],
           "event": [
@@ -2470,7 +2470,7 @@
             "description": "Exemplo de falha de validação: telefone fora do formato (10-11 dígitos, só números).",
             "body": {
               "mode": "raw",
-              "raw": "{\n    \"full_name\": \"Teste Invalido\",\n    \"date_of_birth\": \"1990-01-01\",\n    \"phone\": \"123\",\n    \"company_id\": \"{{company_id}}\",\n    \"company_unit_id\": \"{{unit_id}}\"\n}",
+              "raw": "{\n    \"full_name\": \"Teste Invalido\",\n    \"phone\": \"123\",\n    \"company_id\": \"{{company_id}}\",\n    \"company_unit_id\": \"{{unit_id}}\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -2501,7 +2501,7 @@
                 "description": "Exemplo de falha de validação: telefone fora do formato (10-11 dígitos, só números).",
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n    \"full_name\": \"Teste Invalido\",\n    \"date_of_birth\": \"1990-01-01\",\n    \"phone\": \"123\",\n    \"company_id\": \"{{company_id}}\",\n    \"company_unit_id\": \"{{unit_id}}\"\n}",
+                  "raw": "{\n    \"full_name\": \"Teste Invalido\",\n    \"phone\": \"123\",\n    \"company_id\": \"{{company_id}}\",\n    \"company_unit_id\": \"{{unit_id}}\"\n}",
                   "options": {
                     "raw": {
                       "language": "json"
@@ -2615,7 +2615,7 @@
                   "value": "application/json"
                 }
               ],
-              "body": "{\n    \"items\": [\n        {\n            \"id\": \"e1a2c3d4-0000-4000-8000-000000000004\",\n            \"company_id\": \"b1a2c3d4-0000-4000-8000-000000000001\",\n            \"company_unit_id\": \"c1a2c3d4-0000-4000-8000-000000000002\",\n            \"full_name\": \"Bruno Souza\",\n            \"date_of_birth\": \"1990-05-20\",\n            \"phone\": \"11987654321\",\n            \"created_by_user_id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n            \"updated_by_user_id\": null,\n            \"created_at\": \"2026-01-01T12:00:00Z\",\n            \"updated_at\": \"2026-01-01T12:00:00Z\"\n        }\n    ],\n    \"page\": 1,\n    \"page_size\": 20,\n    \"total\": 1\n}"
+              "body": "{\n    \"items\": [\n        {\n            \"id\": \"e1a2c3d4-0000-4000-8000-000000000004\",\n            \"company_id\": \"b1a2c3d4-0000-4000-8000-000000000001\",\n            \"company_unit_id\": \"c1a2c3d4-0000-4000-8000-000000000002\",\n            \"full_name\": \"Bruno Souza\",\n            \"phone\": \"11987654321\",\n            \"created_by_user_id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n            \"updated_by_user_id\": null,\n            \"created_at\": \"2026-01-01T12:00:00Z\",\n            \"updated_at\": \"2026-01-01T12:00:00Z\"\n        }\n    ],\n    \"page\": 1,\n    \"page_size\": 20,\n    \"total\": 1\n}"
             }
           ],
           "event": [
@@ -2674,7 +2674,7 @@
                   "value": "application/json"
                 }
               ],
-              "body": "{\n    \"id\": \"e1a2c3d4-0000-4000-8000-000000000004\",\n    \"company_id\": \"b1a2c3d4-0000-4000-8000-000000000001\",\n    \"company_unit_id\": \"c1a2c3d4-0000-4000-8000-000000000002\",\n    \"full_name\": \"Bruno Souza\",\n    \"date_of_birth\": \"1990-05-20\",\n    \"phone\": \"11987654321\",\n    \"created_by_user_id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n    \"updated_by_user_id\": null,\n    \"created_at\": \"2026-01-01T12:00:00Z\",\n    \"updated_at\": \"2026-01-01T12:00:00Z\"\n}"
+              "body": "{\n    \"id\": \"e1a2c3d4-0000-4000-8000-000000000004\",\n    \"company_id\": \"b1a2c3d4-0000-4000-8000-000000000001\",\n    \"company_unit_id\": \"c1a2c3d4-0000-4000-8000-000000000002\",\n    \"full_name\": \"Bruno Souza\",\n    \"phone\": \"11987654321\",\n    \"created_by_user_id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n    \"updated_by_user_id\": null,\n    \"created_at\": \"2026-01-01T12:00:00Z\",\n    \"updated_at\": \"2026-01-01T12:00:00Z\"\n}"
             }
           ],
           "event": [
@@ -2761,7 +2761,7 @@
                   "value": "application/json"
                 }
               ],
-              "body": "{\n    \"id\": \"e1a2c3d4-0000-4000-8000-000000000004\",\n    \"company_id\": \"b1a2c3d4-0000-4000-8000-000000000001\",\n    \"company_unit_id\": \"c1a2c3d4-0000-4000-8000-000000000002\",\n    \"full_name\": \"Bruno Souza\",\n    \"date_of_birth\": \"1990-05-20\",\n    \"phone\": \"11999998888\",\n    \"created_by_user_id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n    \"updated_by_user_id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n    \"created_at\": \"2026-01-01T12:00:00Z\",\n    \"updated_at\": \"2026-01-01T12:00:00Z\"\n}"
+              "body": "{\n    \"id\": \"e1a2c3d4-0000-4000-8000-000000000004\",\n    \"company_id\": \"b1a2c3d4-0000-4000-8000-000000000001\",\n    \"company_unit_id\": \"c1a2c3d4-0000-4000-8000-000000000002\",\n    \"full_name\": \"Bruno Souza\",\n    \"phone\": \"11999998888\",\n    \"created_by_user_id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n    \"updated_by_user_id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n    \"created_at\": \"2026-01-01T12:00:00Z\",\n    \"updated_at\": \"2026-01-01T12:00:00Z\"\n}"
             }
           ],
           "event": [
@@ -2795,10 +2795,10 @@
                 "customers"
               ]
             },
-            "description": "Exemplo de falha: mesmo nome + data de nascimento já cadastrado nesta empresa.",
+            "description": "Exemplo de falha: mesmo nome já cadastrado nesta empresa.",
             "body": {
               "mode": "raw",
-              "raw": "{\n    \"full_name\": \"Bruno Souza\",\n    \"date_of_birth\": \"1990-05-20\",\n    \"company_id\": \"{{company_id}}\",\n    \"company_unit_id\": \"{{unit_id}}\"\n}",
+              "raw": "{\n    \"full_name\": \"Bruno Souza\",\n    \"company_id\": \"{{company_id}}\",\n    \"company_unit_id\": \"{{unit_id}}\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -2826,10 +2826,10 @@
                     "customers"
                   ]
                 },
-                "description": "Exemplo de falha: mesmo nome + data de nascimento já cadastrado nesta empresa.",
+                "description": "Exemplo de falha: mesmo nome já cadastrado nesta empresa.",
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n    \"full_name\": \"Bruno Souza\",\n    \"date_of_birth\": \"1990-05-20\",\n    \"company_id\": \"{{company_id}}\",\n    \"company_unit_id\": \"{{unit_id}}\"\n}",
+                  "raw": "{\n    \"full_name\": \"Bruno Souza\",\n    \"company_id\": \"{{company_id}}\",\n    \"company_unit_id\": \"{{unit_id}}\"\n}",
                   "options": {
                     "raw": {
                       "language": "json"
@@ -2865,7 +2865,7 @@
     },
     {
       "name": "Appointments",
-      "description": "Agendamentos, escopados à empresa/unidade própria (não mais herdada de um cliente). Começam como LEAD — nome/nascimento/telefone guardados no próprio agendamento — e só viram cliente de fato (`customers`) quando marcados `completed`. O mesmo lead não pode ter dois agendamentos no mesmo horário exato (índice único parcial, migration `0005`). Toda edição bem-sucedida grava uma linha imutável em `appointment_history`, na mesma transação do UPDATE (função RPC no Postgres).",
+      "description": "Agendamentos, escopados à empresa/unidade própria (não mais herdada de um cliente). Começam como LEAD — nome/telefone guardados no próprio agendamento — e só viram cliente de fato (`customers`) quando marcados `completed`. O mesmo lead não pode ter dois agendamentos no mesmo horário exato (índice único parcial, migration `0005`). Toda edição bem-sucedida grava uma linha imutável em `appointment_history`, na mesma transação do UPDATE (função RPC no Postgres).",
       "item": [
         {
           "name": "Create appointment (lead)",
@@ -2887,10 +2887,10 @@
                 ""
               ]
             },
-            "description": "Cria um agendamento para um LEAD — não recebe (nem aceita) `customer_id`. Quem está marcando ainda não é um cliente: nome, data de nascimento e telefone ficam guardados direto no agendamento (`lead_full_name`/`lead_date_of_birth`/`lead_phone`), sem nenhuma linha criada em `customers`. O lead só vira cliente de verdade quando o agendamento é marcado `completed` — veja 'Update appointment (completed — promove lead a cliente)' mais abaixo. `company_id`/`company_unit_id` seguem a mesma regra de auto-preenchimento de `POST /customers` (aqui informados porque o usuário logado é `super_admin`). Status inicial sempre `scheduled`.",
+            "description": "Cria um agendamento para um LEAD — não recebe (nem aceita) `customer_id`. Quem está marcando ainda não é um cliente: nome e telefone ficam guardados direto no agendamento (`lead_full_name`/`lead_phone`), sem nenhuma linha criada em `customers`. O lead só vira cliente de verdade quando o agendamento é marcado `completed` — veja 'Update appointment (completed — promove lead a cliente)' mais abaixo. `company_id`/`company_unit_id` seguem a mesma regra de auto-preenchimento de `POST /customers` (aqui informados porque o usuário logado é `super_admin`). Status inicial sempre `scheduled`.",
             "body": {
               "mode": "raw",
-              "raw": "{\n    \"lead_full_name\": \"Fernanda Costa\",\n    \"lead_date_of_birth\": \"1992-08-15\",\n    \"lead_phone\": \"11988887777\",\n    \"scheduled_at\": \"2026-06-15T14:30:00Z\",\n    \"notes\": \"Primeira consulta\",\n    \"company_id\": \"{{company_id}}\",\n    \"company_unit_id\": \"{{unit_id}}\"\n}",
+              "raw": "{\n    \"lead_full_name\": \"Fernanda Costa\",\n    \"lead_phone\": \"11988887777\",\n    \"scheduled_at\": \"2026-06-15T14:30:00Z\",\n    \"notes\": \"Primeira consulta\",\n    \"company_id\": \"{{company_id}}\",\n    \"company_unit_id\": \"{{unit_id}}\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -2919,10 +2919,10 @@
                     ""
                   ]
                 },
-                "description": "Cria um agendamento para um LEAD — não recebe (nem aceita) `customer_id`. Quem está marcando ainda não é um cliente: nome, data de nascimento e telefone ficam guardados direto no agendamento (`lead_full_name`/`lead_date_of_birth`/`lead_phone`), sem nenhuma linha criada em `customers`. O lead só vira cliente de verdade quando o agendamento é marcado `completed` — veja 'Update appointment (completed — promove lead a cliente)' mais abaixo. `company_id`/`company_unit_id` seguem a mesma regra de auto-preenchimento de `POST /customers` (aqui informados porque o usuário logado é `super_admin`). Status inicial sempre `scheduled`.",
+                "description": "Cria um agendamento para um LEAD — não recebe (nem aceita) `customer_id`. Quem está marcando ainda não é um cliente: nome e telefone ficam guardados direto no agendamento (`lead_full_name`/`lead_phone`), sem nenhuma linha criada em `customers`. O lead só vira cliente de verdade quando o agendamento é marcado `completed` — veja 'Update appointment (completed — promove lead a cliente)' mais abaixo. `company_id`/`company_unit_id` seguem a mesma regra de auto-preenchimento de `POST /customers` (aqui informados porque o usuário logado é `super_admin`). Status inicial sempre `scheduled`.",
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n    \"lead_full_name\": \"Fernanda Costa\",\n    \"lead_date_of_birth\": \"1992-08-15\",\n    \"lead_phone\": \"11988887777\",\n    \"scheduled_at\": \"2026-06-15T14:30:00Z\",\n    \"notes\": \"Primeira consulta\",\n    \"company_id\": \"{{company_id}}\",\n    \"company_unit_id\": \"{{unit_id}}\"\n}",
+                  "raw": "{\n    \"lead_full_name\": \"Fernanda Costa\",\n    \"lead_phone\": \"11988887777\",\n    \"scheduled_at\": \"2026-06-15T14:30:00Z\",\n    \"notes\": \"Primeira consulta\",\n    \"company_id\": \"{{company_id}}\",\n    \"company_unit_id\": \"{{unit_id}}\"\n}",
                   "options": {
                     "raw": {
                       "language": "json"
@@ -2939,7 +2939,7 @@
                   "value": "application/json"
                 }
               ],
-              "body": "{\n    \"id\": \"f1a2c3d4-0000-4000-8000-000000000005\",\n    \"company_id\": \"c1a2c3d4-0000-4000-8000-000000000001\",\n    \"company_unit_id\": \"d1a2c3d4-0000-4000-8000-000000000002\",\n    \"lead_full_name\": \"Fernanda Costa\",\n    \"lead_date_of_birth\": \"1992-08-15\",\n    \"lead_phone\": \"11988887777\",\n    \"customer_id\": null,\n    \"created_by_user_id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n    \"updated_by_user_id\": null,\n    \"scheduled_at\": \"2026-06-15T14:30:00Z\",\n    \"status\": \"scheduled\",\n    \"notes\": \"Primeira consulta\",\n    \"created_at\": \"2026-01-01T12:00:00Z\",\n    \"updated_at\": \"2026-01-01T12:00:00Z\"\n}"
+              "body": "{\n    \"id\": \"f1a2c3d4-0000-4000-8000-000000000005\",\n    \"company_id\": \"c1a2c3d4-0000-4000-8000-000000000001\",\n    \"company_unit_id\": \"d1a2c3d4-0000-4000-8000-000000000002\",\n    \"lead_full_name\": \"Fernanda Costa\",\n    \"lead_phone\": \"11988887777\",\n    \"customer_id\": null,\n    \"created_by_user_id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n    \"updated_by_user_id\": null,\n    \"scheduled_at\": \"2026-06-15T14:30:00Z\",\n    \"status\": \"scheduled\",\n    \"notes\": \"Primeira consulta\",\n    \"created_at\": \"2026-01-01T12:00:00Z\",\n    \"updated_at\": \"2026-01-01T12:00:00Z\"\n}"
             }
           ],
           "event": [
@@ -2975,10 +2975,10 @@
                 ""
               ]
             },
-            "description": "Exemplo de falha: mesmo lead (nome + nascimento, mesma empresa) já tem um agendamento ativo neste exato horário. Restaurado pela migration `0005` — `customer_id` nulo não colide num índice único comum, então essa proteção precisou de um índice parcial dedicado escopado a `customer_id IS NULL`.",
+            "description": "Exemplo de falha: mesmo lead (nome, mesma empresa) já tem um agendamento ativo neste exato horário. Restaurado pela migration `0005` — `customer_id` nulo não colide num índice único comum, então essa proteção precisou de um índice parcial dedicado escopado a `customer_id IS NULL`.",
             "body": {
               "mode": "raw",
-              "raw": "{\n    \"lead_full_name\": \"Fernanda Costa\",\n    \"lead_date_of_birth\": \"1992-08-15\",\n    \"lead_phone\": \"11988887777\",\n    \"scheduled_at\": \"2026-06-15T14:30:00Z\",\n    \"notes\": \"Primeira consulta\",\n    \"company_id\": \"{{company_id}}\",\n    \"company_unit_id\": \"{{unit_id}}\"\n}",
+              "raw": "{\n    \"lead_full_name\": \"Fernanda Costa\",\n    \"lead_phone\": \"11988887777\",\n    \"scheduled_at\": \"2026-06-15T14:30:00Z\",\n    \"notes\": \"Primeira consulta\",\n    \"company_id\": \"{{company_id}}\",\n    \"company_unit_id\": \"{{unit_id}}\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -3007,10 +3007,10 @@
                     ""
                   ]
                 },
-                "description": "Exemplo de falha: mesmo lead (nome + nascimento, mesma empresa) já tem um agendamento ativo neste exato horário. Restaurado pela migration `0005` — `customer_id` nulo não colide num índice único comum, então essa proteção precisou de um índice parcial dedicado escopado a `customer_id IS NULL`.",
+                "description": "Exemplo de falha: mesmo lead (nome, mesma empresa) já tem um agendamento ativo neste exato horário. Restaurado pela migration `0005` — `customer_id` nulo não colide num índice único comum, então essa proteção precisou de um índice parcial dedicado escopado a `customer_id IS NULL`.",
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n    \"lead_full_name\": \"Fernanda Costa\",\n    \"lead_date_of_birth\": \"1992-08-15\",\n    \"lead_phone\": \"11988887777\",\n    \"scheduled_at\": \"2026-06-15T14:30:00Z\",\n    \"notes\": \"Primeira consulta\",\n    \"company_id\": \"{{company_id}}\",\n    \"company_unit_id\": \"{{unit_id}}\"\n}",
+                  "raw": "{\n    \"lead_full_name\": \"Fernanda Costa\",\n    \"lead_phone\": \"11988887777\",\n    \"scheduled_at\": \"2026-06-15T14:30:00Z\",\n    \"notes\": \"Primeira consulta\",\n    \"company_id\": \"{{company_id}}\",\n    \"company_unit_id\": \"{{unit_id}}\"\n}",
                   "options": {
                     "raw": {
                       "language": "json"
@@ -3043,7 +3043,7 @@
           ]
         },
         {
-          "name": "Create appointment - data de nascimento ausente (422)",
+          "name": "Create appointment - nome do lead ausente (422)",
           "request": {
             "method": "POST",
             "header": [
@@ -3062,10 +3062,10 @@
                 ""
               ]
             },
-            "description": "Exemplo de falha: `lead_date_of_birth` é obrigatório para criar um agendamento (não há mais `customer_id` para dispensar essa validação).",
+            "description": "Exemplo de falha: `lead_full_name` é obrigatório para criar um agendamento (não há mais `customer_id` para dispensar essa validação).",
             "body": {
               "mode": "raw",
-              "raw": "{\n    \"lead_full_name\": \"Sem Data De Nascimento\",\n    \"scheduled_at\": \"2026-06-15T16:00:00Z\",\n    \"company_id\": \"{{company_id}}\",\n    \"company_unit_id\": \"{{unit_id}}\"\n}",
+              "raw": "{\n    \"scheduled_at\": \"2026-06-15T16:00:00Z\",\n    \"company_id\": \"{{company_id}}\",\n    \"company_unit_id\": \"{{unit_id}}\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -3094,10 +3094,10 @@
                     ""
                   ]
                 },
-                "description": "Exemplo de falha: `lead_date_of_birth` é obrigatório para criar um agendamento (não há mais `customer_id` para dispensar essa validação).",
+                "description": "Exemplo de falha: `lead_full_name` é obrigatório para criar um agendamento (não há mais `customer_id` para dispensar essa validação).",
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n    \"lead_full_name\": \"Sem Data De Nascimento\",\n    \"scheduled_at\": \"2026-06-15T16:00:00Z\",\n    \"company_id\": \"{{company_id}}\",\n    \"company_unit_id\": \"{{unit_id}}\"\n}",
+                  "raw": "{\n    \"scheduled_at\": \"2026-06-15T16:00:00Z\",\n    \"company_id\": \"{{company_id}}\",\n    \"company_unit_id\": \"{{unit_id}}\"\n}",
                   "options": {
                     "raw": {
                       "language": "json"
@@ -3114,7 +3114,7 @@
                   "value": "application/json"
                 }
               ],
-              "body": "{\n    \"detail\": [\n        {\n            \"type\": \"missing\",\n            \"loc\": [\n                \"body\",\n                \"lead_date_of_birth\"\n            ],\n            \"msg\": \"Field required\",\n            \"input\": {\n                \"lead_full_name\": \"Sem Data De Nascimento\",\n                \"scheduled_at\": \"2026-06-15T16:00:00Z\",\n                \"company_id\": \"{{company_id}}\",\n                \"company_unit_id\": \"{{unit_id}}\"\n            }\n        }\n    ]\n}"
+              "body": "{\n    \"detail\": [\n        {\n            \"type\": \"missing\",\n            \"loc\": [\n                \"body\",\n                \"lead_full_name\"\n            ],\n            \"msg\": \"Field required\",\n            \"input\": {\n                \"scheduled_at\": \"2026-06-15T16:00:00Z\",\n                \"company_id\": \"{{company_id}}\",\n                \"company_unit_id\": \"{{unit_id}}\"\n            }\n        }\n    ]\n}"
             }
           ],
           "event": [
@@ -3152,7 +3152,7 @@
             "description": "Exemplo de falha: `company_id`/`company_unit_id` com UUID bem formado mas que não existe. As triggers de validação de pai (`enforce_appointment_parents_valid`, migration `0004`) rejeitam antes mesmo da constraint de FK, com `RAISE EXCEPTION` sem `ERRCODE` explícito (SQLSTATE `P0001`) — o handler global de `APIError` em `app/core/exceptions.py` traduz isso num `400` limpo com a mensagem da trigger, em vez do `500` genérico que caía antes desse fix.",
             "body": {
               "mode": "raw",
-              "raw": "{\n    \"lead_full_name\": \"Fantasma\",\n    \"lead_date_of_birth\": \"1990-01-01\",\n    \"scheduled_at\": \"2026-09-01T10:00:00Z\",\n    \"company_id\": \"00000000-0000-4000-8000-000000000000\",\n    \"company_unit_id\": \"00000000-0000-4000-8000-000000000001\"\n}",
+              "raw": "{\n    \"lead_full_name\": \"Fantasma\",\n    \"scheduled_at\": \"2026-09-01T10:00:00Z\",\n    \"company_id\": \"00000000-0000-4000-8000-000000000000\",\n    \"company_unit_id\": \"00000000-0000-4000-8000-000000000001\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -3184,7 +3184,7 @@
                 "description": "Exemplo de falha: `company_id`/`company_unit_id` com UUID bem formado mas que não existe. As triggers de validação de pai (`enforce_appointment_parents_valid`, migration `0004`) rejeitam antes mesmo da constraint de FK, com `RAISE EXCEPTION` sem `ERRCODE` explícito (SQLSTATE `P0001`) — o handler global de `APIError` em `app/core/exceptions.py` traduz isso num `400` limpo com a mensagem da trigger, em vez do `500` genérico que caía antes desse fix.",
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n    \"lead_full_name\": \"Fantasma\",\n    \"lead_date_of_birth\": \"1990-01-01\",\n    \"scheduled_at\": \"2026-09-01T10:00:00Z\",\n    \"company_id\": \"00000000-0000-4000-8000-000000000000\",\n    \"company_unit_id\": \"00000000-0000-4000-8000-000000000001\"\n}",
+                  "raw": "{\n    \"lead_full_name\": \"Fantasma\",\n    \"scheduled_at\": \"2026-09-01T10:00:00Z\",\n    \"company_id\": \"00000000-0000-4000-8000-000000000000\",\n    \"company_unit_id\": \"00000000-0000-4000-8000-000000000001\"\n}",
                   "options": {
                     "raw": {
                       "language": "json"
@@ -3300,7 +3300,7 @@
                   "value": "application/json"
                 }
               ],
-              "body": "{\n    \"items\": [\n        {\n            \"id\": \"f1a2c3d4-0000-4000-8000-000000000005\",\n            \"company_id\": \"c1a2c3d4-0000-4000-8000-000000000001\",\n            \"company_unit_id\": \"d1a2c3d4-0000-4000-8000-000000000002\",\n            \"lead_full_name\": \"Fernanda Costa\",\n            \"lead_date_of_birth\": \"1992-08-15\",\n            \"lead_phone\": \"11988887777\",\n            \"customer_id\": null,\n            \"created_by_user_id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n            \"updated_by_user_id\": null,\n            \"scheduled_at\": \"2026-06-15T14:30:00Z\",\n            \"status\": \"scheduled\",\n            \"notes\": \"Primeira consulta\",\n            \"created_at\": \"2026-01-01T12:00:00Z\",\n            \"updated_at\": \"2026-01-01T12:00:00Z\"\n        }\n    ],\n    \"page\": 1,\n    \"page_size\": 20,\n    \"total\": 1\n}"
+              "body": "{\n    \"items\": [\n        {\n            \"id\": \"f1a2c3d4-0000-4000-8000-000000000005\",\n            \"company_id\": \"c1a2c3d4-0000-4000-8000-000000000001\",\n            \"company_unit_id\": \"d1a2c3d4-0000-4000-8000-000000000002\",\n            \"lead_full_name\": \"Fernanda Costa\",\n            \"lead_phone\": \"11988887777\",\n            \"customer_id\": null,\n            \"created_by_user_id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n            \"updated_by_user_id\": null,\n            \"scheduled_at\": \"2026-06-15T14:30:00Z\",\n            \"status\": \"scheduled\",\n            \"notes\": \"Primeira consulta\",\n            \"created_at\": \"2026-01-01T12:00:00Z\",\n            \"updated_at\": \"2026-01-01T12:00:00Z\"\n        }\n    ],\n    \"page\": 1,\n    \"page_size\": 20,\n    \"total\": 1\n}"
             }
           ],
           "event": [
@@ -3359,7 +3359,7 @@
                   "value": "application/json"
                 }
               ],
-              "body": "{\n    \"id\": \"f1a2c3d4-0000-4000-8000-000000000005\",\n    \"company_id\": \"c1a2c3d4-0000-4000-8000-000000000001\",\n    \"company_unit_id\": \"d1a2c3d4-0000-4000-8000-000000000002\",\n    \"lead_full_name\": \"Fernanda Costa\",\n    \"lead_date_of_birth\": \"1992-08-15\",\n    \"lead_phone\": \"11988887777\",\n    \"customer_id\": null,\n    \"created_by_user_id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n    \"updated_by_user_id\": null,\n    \"scheduled_at\": \"2026-06-15T14:30:00Z\",\n    \"status\": \"scheduled\",\n    \"notes\": \"Primeira consulta\",\n    \"created_at\": \"2026-01-01T12:00:00Z\",\n    \"updated_at\": \"2026-01-01T12:00:00Z\"\n}"
+              "body": "{\n    \"id\": \"f1a2c3d4-0000-4000-8000-000000000005\",\n    \"company_id\": \"c1a2c3d4-0000-4000-8000-000000000001\",\n    \"company_unit_id\": \"d1a2c3d4-0000-4000-8000-000000000002\",\n    \"lead_full_name\": \"Fernanda Costa\",\n    \"lead_phone\": \"11988887777\",\n    \"customer_id\": null,\n    \"created_by_user_id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n    \"updated_by_user_id\": null,\n    \"scheduled_at\": \"2026-06-15T14:30:00Z\",\n    \"status\": \"scheduled\",\n    \"notes\": \"Primeira consulta\",\n    \"created_at\": \"2026-01-01T12:00:00Z\",\n    \"updated_at\": \"2026-01-01T12:00:00Z\"\n}"
             }
           ],
           "event": [
@@ -3446,7 +3446,7 @@
                   "value": "application/json"
                 }
               ],
-              "body": "{\n    \"id\": \"f1a2c3d4-0000-4000-8000-000000000005\",\n    \"company_id\": \"c1a2c3d4-0000-4000-8000-000000000001\",\n    \"company_unit_id\": \"d1a2c3d4-0000-4000-8000-000000000002\",\n    \"lead_full_name\": \"Fernanda Costa\",\n    \"lead_date_of_birth\": \"1992-08-15\",\n    \"lead_phone\": \"11988887777\",\n    \"customer_id\": null,\n    \"created_by_user_id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n    \"updated_by_user_id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n    \"scheduled_at\": \"2026-06-15T14:30:00Z\",\n    \"status\": \"confirmed\",\n    \"notes\": \"Primeira consulta\",\n    \"created_at\": \"2026-01-01T12:00:00Z\",\n    \"updated_at\": \"2026-01-01T12:00:00Z\"\n}"
+              "body": "{\n    \"id\": \"f1a2c3d4-0000-4000-8000-000000000005\",\n    \"company_id\": \"c1a2c3d4-0000-4000-8000-000000000001\",\n    \"company_unit_id\": \"d1a2c3d4-0000-4000-8000-000000000002\",\n    \"lead_full_name\": \"Fernanda Costa\",\n    \"lead_phone\": \"11988887777\",\n    \"customer_id\": null,\n    \"created_by_user_id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n    \"updated_by_user_id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n    \"scheduled_at\": \"2026-06-15T14:30:00Z\",\n    \"status\": \"confirmed\",\n    \"notes\": \"Primeira consulta\",\n    \"created_at\": \"2026-01-01T12:00:00Z\",\n    \"updated_at\": \"2026-01-01T12:00:00Z\"\n}"
             }
           ],
           "event": [
@@ -3536,7 +3536,7 @@
                   "value": "application/json"
                 }
               ],
-              "body": "{\n    \"id\": \"f1a2c3d4-0000-4000-8000-000000000005\",\n    \"company_id\": \"c1a2c3d4-0000-4000-8000-000000000001\",\n    \"company_unit_id\": \"d1a2c3d4-0000-4000-8000-000000000002\",\n    \"lead_full_name\": \"Fernanda Costa\",\n    \"lead_date_of_birth\": \"1992-08-15\",\n    \"lead_phone\": \"11988887777\",\n    \"customer_id\": null,\n    \"created_by_user_id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n    \"updated_by_user_id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n    \"scheduled_at\": \"2026-06-20T10:00:00Z\",\n    \"status\": \"confirmed\",\n    \"notes\": \"Reagendado a pedido do cliente\",\n    \"created_at\": \"2026-01-01T12:00:00Z\",\n    \"updated_at\": \"2026-01-01T12:00:00Z\"\n}"
+              "body": "{\n    \"id\": \"f1a2c3d4-0000-4000-8000-000000000005\",\n    \"company_id\": \"c1a2c3d4-0000-4000-8000-000000000001\",\n    \"company_unit_id\": \"d1a2c3d4-0000-4000-8000-000000000002\",\n    \"lead_full_name\": \"Fernanda Costa\",\n    \"lead_phone\": \"11988887777\",\n    \"customer_id\": null,\n    \"created_by_user_id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n    \"updated_by_user_id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n    \"scheduled_at\": \"2026-06-20T10:00:00Z\",\n    \"status\": \"confirmed\",\n    \"notes\": \"Reagendado a pedido do cliente\",\n    \"created_at\": \"2026-01-01T12:00:00Z\",\n    \"updated_at\": \"2026-01-01T12:00:00Z\"\n}"
             }
           ],
           "event": [
@@ -3652,7 +3652,7 @@
                 "{{appointment_id}}"
               ]
             },
-            "description": "Marcar `status: \"completed\"` (compareceu) pela primeira vez promove o lead a cliente: a API procura um cliente já existente com o mesmo nome + nascimento nesta empresa (reaproveita se achar) ou cria um novo em `customers`, e liga `customer_id` ao agendamento — sem chamada extra do lado do cliente da API. `cancelled`/`no_show` nunca promovem.",
+            "description": "Marcar `status: \"completed\"` (compareceu) pela primeira vez promove o lead a cliente: a API procura um cliente já existente com o mesmo nome nesta empresa (reaproveita se achar) ou cria um novo em `customers`, e liga `customer_id` ao agendamento — sem chamada extra do lado do cliente da API. `cancelled`/`no_show` nunca promovem.",
             "body": {
               "mode": "raw",
               "raw": "{\n    \"status\": \"completed\"\n}",
@@ -3684,7 +3684,7 @@
                     "{{appointment_id}}"
                   ]
                 },
-                "description": "Marcar `status: \"completed\"` (compareceu) pela primeira vez promove o lead a cliente: a API procura um cliente já existente com o mesmo nome + nascimento nesta empresa (reaproveita se achar) ou cria um novo em `customers`, e liga `customer_id` ao agendamento — sem chamada extra do lado do cliente da API. `cancelled`/`no_show` nunca promovem.",
+                "description": "Marcar `status: \"completed\"` (compareceu) pela primeira vez promove o lead a cliente: a API procura um cliente já existente com o mesmo nome nesta empresa (reaproveita se achar) ou cria um novo em `customers`, e liga `customer_id` ao agendamento — sem chamada extra do lado do cliente da API. `cancelled`/`no_show` nunca promovem.",
                 "body": {
                   "mode": "raw",
                   "raw": "{\n    \"status\": \"completed\"\n}",
@@ -3704,7 +3704,7 @@
                   "value": "application/json"
                 }
               ],
-              "body": "{\n    \"id\": \"f1a2c3d4-0000-4000-8000-000000000005\",\n    \"company_id\": \"c1a2c3d4-0000-4000-8000-000000000001\",\n    \"company_unit_id\": \"d1a2c3d4-0000-4000-8000-000000000002\",\n    \"lead_full_name\": \"Fernanda Costa\",\n    \"lead_date_of_birth\": \"1992-08-15\",\n    \"lead_phone\": \"11988887777\",\n    \"customer_id\": \"e1a2c3d4-0000-4000-8000-000000000004\",\n    \"created_by_user_id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n    \"updated_by_user_id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n    \"scheduled_at\": \"2026-06-20T10:00:00Z\",\n    \"status\": \"completed\",\n    \"notes\": \"Reagendado a pedido do cliente\",\n    \"created_at\": \"2026-01-01T12:00:00Z\",\n    \"updated_at\": \"2026-01-01T12:00:00Z\"\n}"
+              "body": "{\n    \"id\": \"f1a2c3d4-0000-4000-8000-000000000005\",\n    \"company_id\": \"c1a2c3d4-0000-4000-8000-000000000001\",\n    \"company_unit_id\": \"d1a2c3d4-0000-4000-8000-000000000002\",\n    \"lead_full_name\": \"Fernanda Costa\",\n    \"lead_phone\": \"11988887777\",\n    \"customer_id\": \"e1a2c3d4-0000-4000-8000-000000000004\",\n    \"created_by_user_id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n    \"updated_by_user_id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n    \"scheduled_at\": \"2026-06-20T10:00:00Z\",\n    \"status\": \"completed\",\n    \"notes\": \"Reagendado a pedido do cliente\",\n    \"created_at\": \"2026-01-01T12:00:00Z\",\n    \"updated_at\": \"2026-01-01T12:00:00Z\"\n}"
             }
           ],
           "event": [

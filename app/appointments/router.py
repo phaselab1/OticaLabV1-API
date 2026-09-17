@@ -35,8 +35,8 @@ AppointmentIdPath = Annotated[str, Path(description="UUID do agendamento.")]
         403: {"description": "Usuário não tem acesso à empresa/unidade informada."},
         409: {
             "description": (
-                "Este lead (mesmo nome + nascimento, mesma empresa) já tem um agendamento "
-                "ativo neste exato horário."
+                "Este lead (mesmo nome, mesma empresa) já tem um agendamento ativo neste "
+                "exato horário."
             )
         },
         422: {"description": "Dados inválidos."},
@@ -48,9 +48,9 @@ async def create_appointment(
     """
     Cria um agendamento para um LEAD — não exige (nem aceita) um
     `customer_id`. Quem está marcando o horário ainda não é um cliente:
-    nome, data de nascimento e telefone ficam guardados no próprio
-    agendamento (`lead_full_name`/`lead_date_of_birth`/`lead_phone`), sem
-    nenhuma linha criada em `customers`.
+    nome e telefone ficam guardados no próprio agendamento
+    (`lead_full_name`/`lead_phone`), sem nenhuma linha criada em
+    `customers`.
 
     O lead só vira cliente de verdade quando o agendamento é marcado como
     `completed` (compareceu) via `PUT /appointments/{id}` — veja a
@@ -163,9 +163,9 @@ async def update_appointment(
     ou não acontecem. `updated_by_user_id` vem do usuário autenticado.
 
     Marcar `status: "completed"` (compareceu) pela primeira vez promove o
-    lead a cliente: a API cria (ou reaproveita, se já existir pelo nome +
-    nascimento nesta empresa) a linha em `customers` e liga `customer_id`
-    ao agendamento — sem chamada extra do cliente da API. `cancelled` e
+    lead a cliente: a API cria (ou reaproveita, se já existir pelo nome
+    nesta empresa) a linha em `customers` e liga `customer_id` ao
+    agendamento — sem chamada extra do cliente da API. `cancelled` e
     `no_show` nunca geram cliente.
     """
     return await service.update(appointment_id, data, current_user)

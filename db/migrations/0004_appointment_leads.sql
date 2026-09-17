@@ -19,6 +19,17 @@ ALTER TABLE appointments
     ADD COLUMN lead_date_of_birth DATE,
     ADD COLUMN lead_phone VARCHAR(20);
 
+-- O backfill abaixo é um UPDATE administrativo (dado histórico, não uma
+-- ação de usuário) em TODA linha de appointments — inclusive linhas cujo
+-- customer_id aponta pra cliente já soft-deletado, ou cujo
+-- updated_by_user_id registra um usuário que hoje não tem mais vínculo de
+-- acesso àquela empresa/unidade (histórico legítimo de edições antigas).
+-- Os triggers de validação da 0001 (que ainda são os ativos neste ponto —
+-- a versão nova só é criada mais abaixo) rejeitariam esse UPDATE por
+-- qualquer um desses motivos. Desabilita o trigger só para o backfill,
+-- escopo mínimo possível, e reabilita logo em seguida.
+ALTER TABLE appointments DISABLE TRIGGER trg_appointments_enforce_company_access;
+
 -- Backfill: todo agendamento já existente tem customer_id preenchido —
 -- copia os dados do cliente vinculado antes de tornar as colunas novas
 -- obrigatórias.
@@ -31,6 +42,8 @@ SET
     lead_phone = c.phone
 FROM customers c
 WHERE a.customer_id = c.id;
+
+ALTER TABLE appointments ENABLE TRIGGER trg_appointments_enforce_company_access;
 
 ALTER TABLE appointments
     ALTER COLUMN company_id SET NOT NULL,

@@ -6,10 +6,25 @@
 -- Novo enum: scheduled, attended, cancelled, no_show.
 
 -- 1) Qualquer agendamento hoje em `confirmed` volta para `scheduled` antes
--- do valor deixar de existir — é o estado não-terminal mais próximo.
+-- do valor deixar de existir — é o estado não-terminal mais próximo. Isso é
+-- um UPDATE administrativo (dado histórico, não uma ação de usuário) em
+-- TODA linha nesse status — inclusive as de empresas/unidades já
+-- desativadas, ou cujo updated_by_user_id registra um usuário que hoje não
+-- tem mais vínculo de acesso. As triggers de validação da appointments
+-- rejeitariam esse UPDATE por qualquer um desses motivos, e a de
+-- appointment_history bloqueia QUALQUER UPDATE por padrão (é append-only).
+-- Desabilita as três só para o backfill, escopo mínimo possível.
+ALTER TABLE appointments DISABLE TRIGGER trg_appointments_parents_valid;
+ALTER TABLE appointments DISABLE TRIGGER trg_appointments_enforce_company_access;
+ALTER TABLE appointment_history DISABLE TRIGGER trg_appointment_history_immutable;
+
 UPDATE appointments SET status = 'scheduled' WHERE status = 'confirmed';
 UPDATE appointment_history SET previous_status = 'scheduled' WHERE previous_status = 'confirmed';
 UPDATE appointment_history SET new_status = 'scheduled' WHERE new_status = 'confirmed';
+
+ALTER TABLE appointments ENABLE TRIGGER trg_appointments_parents_valid;
+ALTER TABLE appointments ENABLE TRIGGER trg_appointments_enforce_company_access;
+ALTER TABLE appointment_history ENABLE TRIGGER trg_appointment_history_immutable;
 
 -- 2) Renomeia completed -> attended no enum atual (suportado nativamente
 -- pelo Postgres, preserva o mesmo OID de tipo — não afeta a function que

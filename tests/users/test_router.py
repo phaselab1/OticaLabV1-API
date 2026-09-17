@@ -46,24 +46,27 @@ class FakeUserService:
         self.rows[user.id] = user
         return user
 
-    async def get_all(self, **_: object) -> Page[User]:
+    async def get_all(self, _current_user: User, **_: object) -> Page[User]:
         items = list(self.rows.values())
         return Page(items=items, page=1, page_size=20, total=len(items))
 
-    async def get_by_id(self, user_id: str) -> User:
+    async def get_by_id(self, user_id: str, _current_user: User) -> User:
         user = self.rows.get(user_id)
         if user is None:
             raise UserNotFoundError(user_id)
         return user
 
     async def update(self, user_id: str, data: UserUpdate) -> User:
-        user = await self.get_by_id(user_id)
+        user = self.rows.get(user_id)
+        if user is None:
+            raise UserNotFoundError(user_id)
         updated = replace(user, **data.model_dump(exclude_unset=True))
         self.rows[user_id] = updated
         return updated
 
     async def delete(self, user_id: str) -> None:
-        await self.get_by_id(user_id)
+        if user_id not in self.rows:
+            raise UserNotFoundError(user_id)
         del self.rows[user_id]
 
 

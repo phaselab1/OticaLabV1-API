@@ -5,9 +5,20 @@ import pytest
 
 from app.core.security import verify_password
 from app.users.exceptions import UserAlreadyExistsError, UserNotFoundError
-from app.users.model import User
+from app.users.model import User, UserRole
 from app.users.schema import UserCreate, UserUpdate
 from app.users.service import UserService
+
+SUPER_ADMIN = User(
+    id="admin-1",
+    full_name="Admin",
+    email="admin@example.com",
+    password_hash="hash",
+    role=UserRole.SUPER_ADMIN,
+    created_at=datetime.now(UTC),
+    updated_at=datetime.now(UTC),
+    deleted_at=None,
+)
 
 
 class FakeUserRepository:
@@ -81,7 +92,7 @@ async def test_create_duplicate_email_raises(service: UserService) -> None:
 
 async def test_get_by_id_missing_raises_not_found(service: UserService) -> None:
     with pytest.raises(UserNotFoundError):
-        await service.get_by_id("missing")
+        await service.get_by_id("missing", SUPER_ADMIN)
 
 
 async def test_delete_then_get_by_id_raises_not_found(service: UserService) -> None:
@@ -92,7 +103,7 @@ async def test_delete_then_get_by_id_raises_not_found(service: UserService) -> N
     await service.delete(created.id)
 
     with pytest.raises(UserNotFoundError):
-        await service.get_by_id(created.id)
+        await service.get_by_id(created.id, SUPER_ADMIN)
 
 
 async def test_update_missing_user_raises_not_found(service: UserService) -> None:

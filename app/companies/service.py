@@ -23,10 +23,10 @@ from app.users.repository import UserRepository
 
 class CompanyService:
     def __init__(
-        self, repository: CompanyRepository, company_user_repository: CompanyUserRepository
+        self, repository: CompanyRepository, company_user_service: "CompanyUserService"
     ) -> None:
         self.repository = repository
-        self.company_user_repository = company_user_repository
+        self.company_user_service = company_user_service
 
     async def create(self, data: CompanyCreate, current_user: User) -> Company:
         payload = data.model_dump(mode="json")
@@ -36,7 +36,7 @@ class CompanyService:
     async def get_all(self, current_user: User, *, page: int, page_size: int) -> Page[Company]:
         company_ids: list[str] | None = None
         if current_user.role != UserRole.SUPER_ADMIN:
-            links = await self.company_user_repository.get_all_for_user(current_user.id)
+            links = await self.company_user_service.repository.get_all_for_user(current_user.id)
             company_ids = list({link.company_id for link in links})
             if not company_ids:
                 return Page(items=[], page=page, page_size=page_size, total=0)
@@ -46,18 +46,19 @@ class CompanyService:
         )
         return Page(items=companies, page=page, page_size=page_size, total=total)
 
-    async def get_by_id(self, company_id: str) -> Company:
+    async def get_by_id(self, company_id: str, current_user: User) -> Company:
         company = await self.repository.get_by_id(company_id)
         if company is None:
             raise CompanyNotFoundError(company_id)
+
+        if not await self.company_user_service.has_company_access(current_user, company_id):
+            raise CompanyNotFoundError(company_id)
+
         return company
 
     async def update(self, company_id: str, data: CompanyUpdate, current_user: User) -> Company:
-        if current_user.role != UserRole.SUPER_ADMIN:
-            links = await self.company_user_repository.get_all_for_user(current_user.id)
-            has_admin = any(link.company_id == company_id and link.unit_id is None for link in links)
-            if not has_admin:
-                raise ForbiddenError("Insufficient access to manage this company")
+        if not await self.company_user_service.has_company_admin_access(current_user, company_id):
+            raise ForbiddenError("Insufficient access to manage this company")
 
         payload = data.model_dump(mode="json", exclude_unset=True)
         company = await self.repository.update(company_id, payload)
@@ -73,10 +74,14 @@ class CompanyService:
 
 class CompanyUnitService:
     def __init__(
-        self, repository: CompanyUnitRepository, company_repository: CompanyRepository
+        self,
+        repository: CompanyUnitRepository,
+        company_repository: CompanyRepository,
+        company_user_service: "CompanyUserService",
     ) -> None:
         self.repository = repository
         self.company_repository = company_repository
+        self.company_user_service = company_user_service
 
     async def create(
         self, company_id: str, data: CompanyUnitCreate, current_user: User
@@ -90,28 +95,34 @@ class CompanyUnitService:
         payload["created_by_user_id"] = current_user.id
         return await self.repository.create(payload)
 
-    async def get_all(self, company_id: str, *, page: int, page_size: int) -> Page[CompanyUnit]:
+    async def get_all(
+        self, company_id: str, current_user: User, *, page: int, page_size: int
+    ) -> Page[CompanyUnit]:
+        if not await self.company_user_service.has_company_access(current_user, company_id):
+            raise CompanyNotFoundError(company_id)
+
         units, total = await self.repository.get_all(company_id, page=page, page_size=page_size)
         return Page(items=units, page=page, page_size=page_size, total=total)
 
-    async def get_by_id(self, unit_id: str) -> CompanyUnit:
+    async def get_by_id(self, unit_id: str, current_user: User) -> CompanyUnit:
         unit = await self.repository.get_by_id(unit_id)
         if unit is None:
             raise CompanyUnitNotFoundError(unit_id)
+
+        if not await self.company_user_service.has_unit_access(
+            current_user, unit.company_id, unit.id
+        ):
+            raise CompanyUnitNotFoundError(unit_id)
+
         return unit
 
     async def update(
         self, unit_id: str, data: CompanyUnitUpdate, current_user: User
     ) -> CompanyUnit:
-        existing = await self.get_by_id(unit_id)
-        if current_user.role != UserRole.SUPER_ADMIN:
-            links = await self.company_repository.db.table("company_users").select("*").eq("user_id", current_user.id).eq("company_id", existing.company_id).is_("deleted_at", "null").execute()
-            has_admin = any(link.get("unit_id") is None or link.get("unit_id") == unit_id for link in links.data)
-            if not has_admin:
-                raise ForbiddenError("Insufficient access to manage this unit")
+        existing = await self.get_by_id(unit_id, current_user)
 
         payload = data.model_dump(mode="json", exclude_unset=True)
-        unit = await self.repository.update(unit_id, payload)
+        unit = await self.repository.update(existing.id, payload)
         if unit is None:
             raise CompanyUnitNotFoundError(unit_id)
         return unit
@@ -191,6 +202,12 @@ class CompanyUserService:
             return True
         links = await self.repository.get_all_for_user(user.id)
         return any(link.company_id == company_id and link.unit_id is None for link in links)
+
+    async def has_company_access(self, user: User, company_id: str) -> bool:
+        if user.role == UserRole.SUPER_ADMIN:
+            return True
+        links = await self.repository.get_all_for_user(user.id)
+        return any(link.company_id == company_id for link in links)
 
     async def has_unit_access(self, user: User, company_id: str, unit_id: str) -> bool:
         if user.role == UserRole.SUPER_ADMIN:

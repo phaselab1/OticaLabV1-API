@@ -7,9 +7,20 @@ class InvalidCredentialsError(Exception):
         super().__init__("Invalid email or password")
 
 
+class TooManyLoginAttemptsError(Exception):
+    def __init__(self) -> None:
+        super().__init__("Too many failed login attempts. Try again later.")
+
+
 def register_auth_exception_handlers(app: FastAPI) -> None:
     @app.exception_handler(InvalidCredentialsError)
     async def invalid_credentials_handler(
         request: Request, exc: InvalidCredentialsError
     ) -> JSONResponse:
         return JSONResponse(status_code=401, content={"detail": str(exc)})
+
+    @app.exception_handler(TooManyLoginAttemptsError)
+    async def too_many_attempts_handler(
+        request: Request, exc: TooManyLoginAttemptsError
+    ) -> JSONResponse:
+        return JSONResponse(status_code=429, content={"detail": str(exc)})

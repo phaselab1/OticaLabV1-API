@@ -208,8 +208,9 @@ async def test_attendant_with_no_access_to_requested_company_forbidden() -> None
 
 async def test_get_by_id_missing_raises_not_found() -> None:
     service = _service(FakeCompanyUserRepository([]))
+    user = _user(UserRole.SUPER_ADMIN)
     with pytest.raises(CustomerNotFoundError):
-        await service.get_by_id("missing")
+        await service.get_by_id("missing", user)
 
 
 async def test_update_requires_unit_access() -> None:

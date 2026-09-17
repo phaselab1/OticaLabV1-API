@@ -46,12 +46,16 @@ async def create_user(
 )
 async def list_users(
     service: UserServiceDep,
-    _current_user: CurrentUser,
+    current_user: CurrentUser,
     page: Annotated[int, Query(ge=1, description="Número da página, começando em 1.")] = 1,
     page_size: Annotated[int, Query(ge=1, le=100, description="Itens por página (máx. 100).")] = 20,
 ) -> Page[User]:
-    """Lista todos os usuários ativos (soft-deletados não aparecem), paginado."""
-    return await service.get_all(page=page, page_size=page_size)
+    """
+    Lista usuários ativos, paginado. `super_admin` vê todos; qualquer
+    outro role só vê a si mesmo e usuários com quem compartilha vínculo
+    de acesso a alguma empresa.
+    """
+    return await service.get_all(current_user, page=page, page_size=page_size)
 
 
 @router.get(
@@ -60,12 +64,13 @@ async def list_users(
     summary="Buscar usuário por ID",
     responses={
         401: {"description": "Token ausente ou inválido."},
+        403: {"description": "Usuário não compartilha vínculo de empresa com o usuário buscado."},
         404: {"description": "Usuário não encontrado (ou soft-deletado)."},
     },
 )
-async def get_user(user_id: str, service: UserServiceDep, _current_user: CurrentUser) -> User:
+async def get_user(user_id: str, service: UserServiceDep, current_user: CurrentUser) -> User:
     """Busca um usuário pelo UUID."""
-    return await service.get_by_id(user_id)
+    return await service.get_by_id(user_id, current_user)
 
 
 @router.put(

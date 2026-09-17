@@ -7,7 +7,7 @@ from supabase import AsyncClient
 
 from app.customers.exceptions import CustomerAlreadyExistsError
 from app.customers.model import Customer
-from app.shared.utils.postgrest import as_row
+from app.shared.utils.postgrest import as_row, as_rows
 
 TABLE = "customers"
 UNIQUE_VIOLATION = "23505"
@@ -49,6 +49,17 @@ class CustomerRepository:
         )
         customers = [Customer.from_row(as_row(row)) for row in response.data]
         return customers, response.count or 0
+
+    async def get_ids_by_scope(
+        self, *, company_id: str, company_unit_id: str | None = None
+    ) -> list[str]:
+        query = (
+            self.db.table(TABLE).select("id").is_("deleted_at", "null").eq("company_id", company_id)
+        )
+        if company_unit_id is not None:
+            query = query.eq("company_unit_id", company_unit_id)
+        response = await query.execute()
+        return [row["id"] for row in as_rows(response.data)]
 
     async def get_by_id(self, customer_id: str) -> Customer | None:
         response = (

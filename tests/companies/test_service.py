@@ -175,6 +175,10 @@ def _user(role: UserRole, user_id: str = "user-1") -> User:
     )
 
 
+def _company_user_service(repo: FakeCompanyUserRepository) -> CompanyUserService:
+    return CompanyUserService(repo, None, None, None)  # type: ignore[arg-type]
+
+
 def _link(user_id: str, company_id: str, unit_id: str | None) -> CompanyUserLink:
     now = datetime.now(UTC)
     return CompanyUserLink(
@@ -190,7 +194,9 @@ def _link(user_id: str, company_id: str, unit_id: str | None) -> CompanyUserLink
 
 
 async def test_create_company() -> None:
-    service = CompanyService(FakeCompanyRepository(), FakeCompanyUserRepository())  # type: ignore[arg-type]
+    service = CompanyService(
+        FakeCompanyRepository(), _company_user_service(FakeCompanyUserRepository())
+    )  # type: ignore[arg-type]
     super_admin = _user(UserRole.SUPER_ADMIN)
 
     company = await service.create(
@@ -204,7 +210,9 @@ async def test_create_company() -> None:
 
 
 async def test_create_company_duplicate_cnpj_raises() -> None:
-    service = CompanyService(FakeCompanyRepository(), FakeCompanyUserRepository())  # type: ignore[arg-type]
+    service = CompanyService(
+        FakeCompanyRepository(), _company_user_service(FakeCompanyUserRepository())
+    )  # type: ignore[arg-type]
     super_admin = _user(UserRole.SUPER_ADMIN)
     data = CompanyCreate(name="Nova Visao", cnpj="12345678000199", state="SP", city="Sao Paulo")
     await service.create(data, super_admin)
@@ -214,15 +222,17 @@ async def test_create_company_duplicate_cnpj_raises() -> None:
 
 
 async def test_get_by_id_missing_raises_not_found() -> None:
-    service = CompanyService(FakeCompanyRepository(), FakeCompanyUserRepository())  # type: ignore[arg-type]
+    service = CompanyService(
+        FakeCompanyRepository(), _company_user_service(FakeCompanyUserRepository())
+    )  # type: ignore[arg-type]
     with pytest.raises(CompanyNotFoundError):
-        await service.get_by_id("missing")
+        await service.get_by_id("missing", _user(UserRole.SUPER_ADMIN))
 
 
 async def test_super_admin_sees_all_companies() -> None:
     repo = FakeCompanyRepository()
     company_user_repo = FakeCompanyUserRepository()
-    service = CompanyService(repo, company_user_repo)  # type: ignore[arg-type]
+    service = CompanyService(repo, _company_user_service(company_user_repo))  # type: ignore[arg-type]
     super_admin = _user(UserRole.SUPER_ADMIN)
     await service.create(
         CompanyCreate(name="A", cnpj="11111111000100", state="SP", city="X"), super_admin
@@ -239,16 +249,18 @@ async def test_super_admin_sees_all_companies() -> None:
 async def test_admin_sees_only_linked_companies() -> None:
     repo = FakeCompanyRepository()
     super_admin = _user(UserRole.SUPER_ADMIN)
-    company_a = await CompanyService(repo, FakeCompanyUserRepository()).create(  # type: ignore[arg-type]
+    company_a = await CompanyService(
+        repo, _company_user_service(FakeCompanyUserRepository())
+    ).create(  # type: ignore[arg-type]
         CompanyCreate(name="A", cnpj="11111111000100", state="SP", city="X"), super_admin
     )
-    await CompanyService(repo, FakeCompanyUserRepository()).create(  # type: ignore[arg-type]
+    await CompanyService(repo, _company_user_service(FakeCompanyUserRepository())).create(  # type: ignore[arg-type]
         CompanyCreate(name="B", cnpj="22222222000100", state="RJ", city="Y"), super_admin
     )
 
     admin = _user(UserRole.ADMIN, user_id="admin-1")
     company_user_repo = FakeCompanyUserRepository([_link(admin.id, company_a.id, None)])
-    service = CompanyService(repo, company_user_repo)  # type: ignore[arg-type]
+    service = CompanyService(repo, _company_user_service(company_user_repo))  # type: ignore[arg-type]
 
     page = await service.get_all(admin, page=1, page_size=20)
 
@@ -257,7 +269,11 @@ async def test_admin_sees_only_linked_companies() -> None:
 
 
 async def test_create_unit_requires_existing_company() -> None:
-    service = CompanyUnitService(FakeCompanyUnitRepository(), FakeCompanyRepository())  # type: ignore[arg-type]
+    service = CompanyUnitService(
+        FakeCompanyUnitRepository(),
+        FakeCompanyRepository(),
+        _company_user_service(FakeCompanyUserRepository()),
+    )  # type: ignore[arg-type]
     super_admin = _user(UserRole.SUPER_ADMIN)
 
     with pytest.raises(CompanyNotFoundError):
@@ -271,7 +287,9 @@ async def test_create_unit_requires_existing_company() -> None:
 async def test_grant_access_requires_company_admin_access() -> None:
     company_repo = FakeCompanyRepository()
     super_admin = _user(UserRole.SUPER_ADMIN)
-    company = await CompanyService(company_repo, FakeCompanyUserRepository()).create(  # type: ignore[arg-type]
+    company = await CompanyService(
+        company_repo, _company_user_service(FakeCompanyUserRepository())
+    ).create(  # type: ignore[arg-type]
         CompanyCreate(name="A", cnpj="11111111000100", state="SP", city="X"), super_admin
     )
 
@@ -291,7 +309,9 @@ async def test_grant_access_requires_company_admin_access() -> None:
 async def test_super_admin_can_grant_access() -> None:
     company_repo = FakeCompanyRepository()
     super_admin = _user(UserRole.SUPER_ADMIN)
-    company = await CompanyService(company_repo, FakeCompanyUserRepository()).create(  # type: ignore[arg-type]
+    company = await CompanyService(
+        company_repo, _company_user_service(FakeCompanyUserRepository())
+    ).create(  # type: ignore[arg-type]
         CompanyCreate(name="A", cnpj="11111111000100", state="SP", city="X"), super_admin
     )
 
@@ -312,7 +332,9 @@ async def test_super_admin_can_grant_access() -> None:
 async def test_revoke_by_outsider_forbidden() -> None:
     company_repo = FakeCompanyRepository()
     super_admin = _user(UserRole.SUPER_ADMIN)
-    company = await CompanyService(company_repo, FakeCompanyUserRepository()).create(  # type: ignore[arg-type]
+    company = await CompanyService(
+        company_repo, _company_user_service(FakeCompanyUserRepository())
+    ).create(  # type: ignore[arg-type]
         CompanyCreate(name="A", cnpj="11111111000100", state="SP", city="X"), super_admin
     )
     grant_repo = FakeCompanyUserRepository()
@@ -345,7 +367,9 @@ async def test_revoke_missing_link_raises_not_found() -> None:
 async def test_grant_unknown_unit_raises_not_found() -> None:
     company_repo = FakeCompanyRepository()
     super_admin = _user(UserRole.SUPER_ADMIN)
-    company = await CompanyService(company_repo, FakeCompanyUserRepository()).create(  # type: ignore[arg-type]
+    company = await CompanyService(
+        company_repo, _company_user_service(FakeCompanyUserRepository())
+    ).create(  # type: ignore[arg-type]
         CompanyCreate(name="A", cnpj="11111111000100", state="SP", city="X"), super_admin
     )
     service = CompanyUserService(
@@ -364,7 +388,9 @@ async def test_grant_unknown_unit_raises_not_found() -> None:
 async def test_grant_manager_without_unit_raises() -> None:
     company_repo = FakeCompanyRepository()
     super_admin = _user(UserRole.SUPER_ADMIN)
-    company = await CompanyService(company_repo, FakeCompanyUserRepository()).create(  # type: ignore[arg-type]
+    company = await CompanyService(
+        company_repo, _company_user_service(FakeCompanyUserRepository())
+    ).create(  # type: ignore[arg-type]
         CompanyCreate(name="A", cnpj="11111111000100", state="SP", city="X"), super_admin
     )
     service = CompanyUserService(
@@ -382,10 +408,14 @@ async def test_grant_manager_with_unit_succeeds() -> None:
     company_repo = FakeCompanyRepository()
     unit_repo = FakeCompanyUnitRepository()
     super_admin = _user(UserRole.SUPER_ADMIN)
-    company = await CompanyService(company_repo, FakeCompanyUserRepository()).create(  # type: ignore[arg-type]
+    company = await CompanyService(
+        company_repo, _company_user_service(FakeCompanyUserRepository())
+    ).create(  # type: ignore[arg-type]
         CompanyCreate(name="A", cnpj="11111111000100", state="SP", city="X"), super_admin
     )
-    unit = await CompanyUnitService(unit_repo, company_repo).create(  # type: ignore[arg-type]
+    unit = await CompanyUnitService(
+        unit_repo, company_repo, _company_user_service(FakeCompanyUserRepository())
+    ).create(  # type: ignore[arg-type]
         company.id,
         CompanyUnitCreate(name="ARG", code="ARG", cnpj="11111111000200", state="SP", city="X"),
         super_admin,

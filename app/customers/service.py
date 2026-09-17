@@ -5,7 +5,7 @@ from app.customers.model import Customer
 from app.customers.repository import CustomerRepository
 from app.customers.schema import CustomerCreate, CustomerUpdate
 from app.shared.pagination import Page
-from app.users.model import User
+from app.users.model import User, UserRole
 
 
 class CustomerService:
@@ -28,32 +28,39 @@ class CustomerService:
 
     async def get_all(
         self,
+        current_user: User,
         *,
         page: int,
         page_size: int,
         company_id: str | None = None,
         company_unit_id: str | None = None,
     ) -> Page[Customer]:
+        if current_user.role != UserRole.SUPER_ADMIN:
+            company_id, company_unit_id = await self.company_user_service.resolve_company_and_unit(
+                current_user, company_id, company_unit_id
+            )
+
         customers, total = await self.repository.get_all(
             page=page, page_size=page_size, company_id=company_id, company_unit_id=company_unit_id
         )
         return Page(items=customers, page=page, page_size=page_size, total=total)
 
-    async def get_by_id(self, customer_id: str) -> Customer:
+    async def get_by_id(self, customer_id: str, current_user: User) -> Customer:
         customer = await self.repository.get_by_id(customer_id)
         if customer is None:
             raise CustomerNotFoundError(customer_id)
+
+        if not await self.company_user_service.has_unit_access(
+            current_user, customer.company_id, customer.company_unit_id
+        ):
+            raise ForbiddenError(
+                f"No access to unit {customer.company_unit_id} of company {customer.company_id}"
+            )
+
         return customer
 
     async def update(self, customer_id: str, data: CustomerUpdate, current_user: User) -> Customer:
-        existing = await self.get_by_id(customer_id)
-
-        if not await self.company_user_service.has_unit_access(
-            current_user, existing.company_id, existing.company_unit_id
-        ):
-            raise ForbiddenError(
-                f"No access to unit {existing.company_unit_id} of company {existing.company_id}"
-            )
+        await self.get_by_id(customer_id, current_user)
 
         payload = data.model_dump(mode="json", exclude_unset=True)
         payload["updated_by_user_id"] = current_user.id
@@ -62,7 +69,8 @@ class CustomerService:
             raise CustomerNotFoundError(customer_id)
         return customer
 
-    async def delete(self, customer_id: str) -> None:
+    async def delete(self, customer_id: str, current_user: User) -> None:
+        await self.get_by_id(customer_id, current_user)
         deleted = await self.repository.soft_delete(customer_id)
         if not deleted:
             raise CustomerNotFoundError(customer_id)

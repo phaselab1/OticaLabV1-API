@@ -54,11 +54,11 @@ class FakeAppointmentService:
         self.rows[appointment.id] = appointment
         return appointment
 
-    async def get_all(self, **_: object) -> Page[Appointment]:
+    async def get_all(self, _current_user: User, **_: object) -> Page[Appointment]:
         items = list(self.rows.values())
         return Page(items=items, page=1, page_size=20, total=len(items))
 
-    async def get_by_id(self, appointment_id: str) -> Appointment:
+    async def get_by_id(self, appointment_id: str, _current_user: User) -> Appointment:
         appointment = self.rows.get(appointment_id)
         if appointment is None:
             raise AppointmentNotFoundError(appointment_id)
@@ -67,20 +67,20 @@ class FakeAppointmentService:
     async def update(
         self, appointment_id: str, data: AppointmentUpdate, current_user: User
     ) -> Appointment:
-        appointment = await self.get_by_id(appointment_id)
+        appointment = await self.get_by_id(appointment_id, current_user)
         changes = data.model_dump(exclude_unset=True)
         updated = replace(appointment, updated_by_user_id=current_user.id, **changes)
         self.rows[appointment_id] = updated
         return updated
 
-    async def delete(self, appointment_id: str) -> None:
-        await self.get_by_id(appointment_id)
+    async def delete(self, appointment_id: str, current_user: User) -> None:
+        await self.get_by_id(appointment_id, current_user)
         del self.rows[appointment_id]
 
 
 class FakeAppointmentHistoryService:
     async def get_by_appointment(
-        self, appointment_id: str, *, page: int, page_size: int
+        self, appointment_id: str, _current_user: User, *, page: int, page_size: int
     ) -> Page[AppointmentHistoryEntry]:
         if appointment_id != "with-history":
             raise AppointmentNotFoundError(appointment_id)

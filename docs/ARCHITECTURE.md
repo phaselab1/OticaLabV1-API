@@ -247,6 +247,17 @@ Implicação real encontrada em produção: **unique constraints não excluem li
 
 Sem Alembic — [`db/migrations/0001_initial_schema.sql`](../db/migrations/0001_initial_schema.sql) é aplicado manualmente no SQL Editor do Supabase Studio. Mudanças futuras viram um novo arquivo `0002_...sql`, nunca uma edição do que já foi aplicado.
 
+[`0002_security_hardening.sql`](../db/migrations/0002_security_hardening.sql) (aplicar depois da `0001`) adiciona:
+
+- `ENABLE ROW LEVEL SECURITY` + `REVOKE ALL ... FROM anon, authenticated` em todas as tabelas — a API só acessa o banco via `service_role` (que ignora RLS), então isso é defesa em profundidade contra um eventual vazamento futuro da chave `anon`.
+- `SELECT ... FOR SHARE` nas 4 funções de trigger que liam o estado "ativo" (`deleted_at`) de um registro-pai sem travar a linha, fechando uma corrida onde a desativação concorrente da empresa/unidade/cliente-pai podia deixar um filho "vivo" pendurado num pai já desativado.
+- `SET search_path = public` em toda function, hardening padrão contra manipulação de `search_path`.
+- Tabela `login_attempts`, usada pelo rate limiting de `POST /auth/login` (veja abaixo).
+
+### Rate limiting de login
+
+`POST /auth/login` bloqueia (`429`) após 5 tentativas com falha para o mesmo e-mail em 15 minutos. O contador vive na tabela `login_attempts` (Postgres), não em memória do processo — necessário para a API escalar horizontalmente sem estado compartilhado entre instâncias. Cada tentativa (sucesso ou falha) também é registrada ali, servindo de trilha de auditoria básica de login.
+
 ### Função RPC para auditoria atômica
 
 `PUT /appointments/{id}` precisa que o `UPDATE` em `appointments` e o `INSERT` em `appointment_history` aconteçam **na mesma transação**. Como o SDK do Supabase faz uma chamada HTTP por operação (sem transação entre duas chamadas da aplicação), a única forma correta é uma function no próprio Postgres:

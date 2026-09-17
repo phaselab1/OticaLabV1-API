@@ -26,23 +26,27 @@ BrazilianState = Annotated[
 
 
 class CompanyCreate(BaseModel):
-    name: str = Field(description="Nome da empresa.", examples=["Ótica Nova Visão"])
+    name: str = Field(max_length=255, description="Nome da empresa.", examples=["Ótica Nova Visão"])
     cnpj: str = Field(
         pattern=CNPJ_PATTERN,
         description="CNPJ com 14 dígitos numéricos, sem máscara. Só o formato é validado.",
         examples=["12345678000199"],
     )
     state: BrazilianState
-    city: str = Field(description="Cidade da sede da empresa.", examples=["São Paulo"])
+    city: str = Field(
+        max_length=255, description="Cidade da sede da empresa.", examples=["São Paulo"]
+    )
 
 
 class CompanyUpdate(BaseModel):
-    name: str | None = Field(default=None, description="Novo nome, se for alterar.")
+    name: str | None = Field(default=None, max_length=255, description="Novo nome, se for alterar.")
     cnpj: str | None = Field(
         default=None, pattern=CNPJ_PATTERN, description="Novo CNPJ, se for alterar."
     )
     state: BrazilianState | None = None
-    city: str | None = Field(default=None, description="Nova cidade, se for alterar.")
+    city: str | None = Field(
+        default=None, max_length=255, description="Nova cidade, se for alterar."
+    )
 
 
 class CompanyResponse(BaseModel):
@@ -59,7 +63,9 @@ class CompanyResponse(BaseModel):
 
 
 class CompanyUnitCreate(BaseModel):
-    name: str = Field(description="Nome da unidade.", examples=["Unidade Argentina"])
+    name: str = Field(
+        max_length=255, description="Nome da unidade.", examples=["Unidade Argentina"]
+    )
     code: str = Field(
         max_length=10,
         description="Identificador curto usado no dia a dia (único por empresa).",
@@ -71,11 +77,11 @@ class CompanyUnitCreate(BaseModel):
         examples=["12345678000280"],
     )
     state: BrazilianState
-    city: str = Field(description="Cidade da unidade.", examples=["São Paulo"])
+    city: str = Field(max_length=255, description="Cidade da unidade.", examples=["São Paulo"])
 
 
 class CompanyUnitUpdate(BaseModel):
-    name: str | None = Field(default=None, description="Novo nome, se for alterar.")
+    name: str | None = Field(default=None, max_length=255, description="Novo nome, se for alterar.")
     code: str | None = Field(
         default=None, max_length=10, description="Novo código, se for alterar."
     )
@@ -83,7 +89,9 @@ class CompanyUnitUpdate(BaseModel):
         default=None, pattern=CNPJ_PATTERN, description="Novo CNPJ, se for alterar."
     )
     state: BrazilianState | None = None
-    city: str | None = Field(default=None, description="Nova cidade, se for alterar.")
+    city: str | None = Field(
+        default=None, max_length=255, description="Nova cidade, se for alterar."
+    )
 
 
 class CompanyUnitResponse(BaseModel):

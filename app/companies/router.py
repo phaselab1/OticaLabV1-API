@@ -75,12 +75,14 @@ async def list_companies(
     summary="Buscar empresa por ID",
     responses={
         401: {"description": "Token ausente ou inválido."},
-        404: {"description": "Empresa não encontrada (ou soft-deletada)."},
+        404: {"description": "Empresa não encontrada, soft-deletada, ou sem acesso."},
     },
 )
-async def get_company(company_id: CompanyIdPath, service: CompanyServiceDep) -> Company:
-    """Busca uma empresa pelo UUID."""
-    return await service.get_by_id(company_id)
+async def get_company(
+    company_id: CompanyIdPath, service: CompanyServiceDep, current_user: CurrentUser
+) -> Company:
+    """Busca uma empresa pelo UUID. Requer algum vínculo de acesso a ela (ou `super_admin`)."""
+    return await service.get_by_id(company_id, current_user)
 
 
 @router.put(
@@ -154,17 +156,20 @@ async def create_company_unit(
     "/{company_id}/units",
     response_model=Page[CompanyUnitResponse],
     summary="Listar unidades de uma empresa",
-    responses={401: {"description": "Token ausente ou inválido."}},
+    responses={
+        401: {"description": "Token ausente ou inválido."},
+        404: {"description": "Empresa não encontrada, soft-deletada, ou sem acesso."},
+    },
 )
 async def list_company_units(
     company_id: CompanyIdPath,
     service: CompanyUnitServiceDep,
-    _current_user: CurrentUser,
+    current_user: CurrentUser,
     page: Annotated[int, Query(ge=1)] = 1,
     page_size: Annotated[int, Query(ge=1, le=100)] = 20,
 ) -> Page[CompanyUnit]:
-    """Lista as unidades ativas de uma empresa, paginado."""
-    return await service.get_all(company_id, page=page, page_size=page_size)
+    """Lista as unidades ativas de uma empresa, paginado. Requer algum vínculo de acesso a ela."""
+    return await service.get_all(company_id, current_user, page=page, page_size=page_size)
 
 
 @router.get(
@@ -173,14 +178,16 @@ async def list_company_units(
     summary="Buscar unidade por ID",
     responses={
         401: {"description": "Token ausente ou inválido."},
-        404: {"description": "Unidade não encontrada (ou soft-deletada)."},
+        404: {"description": "Unidade não encontrada, soft-deletada, ou sem acesso."},
     },
 )
 async def get_company_unit(
-    unit_id: Annotated[str, Path(description="UUID da unidade.")], service: CompanyUnitServiceDep
+    unit_id: Annotated[str, Path(description="UUID da unidade.")],
+    service: CompanyUnitServiceDep,
+    current_user: CurrentUser,
 ) -> CompanyUnit:
-    """Busca uma unidade pelo UUID."""
-    return await service.get_by_id(unit_id)
+    """Busca uma unidade pelo UUID. Requer acesso à unidade (ou à empresa inteira)."""
+    return await service.get_by_id(unit_id, current_user)
 
 
 @router.put(

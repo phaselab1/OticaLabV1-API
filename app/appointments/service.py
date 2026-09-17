@@ -4,6 +4,7 @@ from app.appointments.repository import AppointmentHistoryRepository, Appointmen
 from app.appointments.schema import AppointmentCreate, AppointmentReschedule, AppointmentUpdate
 from app.companies.service import CompanyUserService
 from app.core.exceptions import ForbiddenError
+from app.customers.exceptions import CustomerAlreadyExistsError
 from app.customers.repository import CustomerRepository
 from app.shared.pagination import Page
 from app.users.model import User, UserRole
@@ -89,16 +90,29 @@ class AppointmentService:
         if existing_customer is not None:
             return existing_customer.id
 
-        customer = await self.customer_repository.create(
-            {
-                "company_id": appointment.company_id,
-                "company_unit_id": appointment.company_unit_id,
-                "full_name": appointment.lead_full_name,
-                "date_of_birth": date_of_birth,
-                "phone": appointment.lead_phone,
-                "created_by_user_id": current_user.id,
-            }
-        )
+        try:
+            customer = await self.customer_repository.create(
+                {
+                    "company_id": appointment.company_id,
+                    "company_unit_id": appointment.company_unit_id,
+                    "full_name": appointment.lead_full_name,
+                    "date_of_birth": date_of_birth,
+                    "phone": appointment.lead_phone,
+                    "created_by_user_id": current_user.id,
+                }
+            )
+        except CustomerAlreadyExistsError:
+            # Lost a race against a concurrent promotion of the same lead identity
+            # (check-then-create isn't atomic across two PostgREST calls) — the
+            # winner's row is already committed and visible, so just use it.
+            existing_customer = await self.customer_repository.get_by_identity(
+                company_id=appointment.company_id,
+                full_name=appointment.lead_full_name,
+                date_of_birth=date_of_birth,
+            )
+            if existing_customer is None:
+                raise
+            return existing_customer.id
         return customer.id
 
     async def update(

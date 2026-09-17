@@ -25,9 +25,9 @@ class AppointmentRepository:
             response = await self.db.table(TABLE).insert(data).execute()
         except APIError as exc:
             if exc.code == UNIQUE_VIOLATION:
-                raise AppointmentAlreadyExistsError(
-                    data.get("customer_id"), data["scheduled_at"]
-                ) from exc
+                customer_id = data.get("customer_id")
+                subject = f"Customer {customer_id}" if customer_id else data["lead_full_name"]
+                raise AppointmentAlreadyExistsError(subject, data["scheduled_at"]) from exc
             raise
         return Appointment.from_row(as_row(response.data[0]))
 

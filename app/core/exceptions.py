@@ -12,6 +12,12 @@ logger = logging.getLogger("app")
 # the format, so this is reachable from any `/{id}` route.
 INVALID_TEXT_REPRESENTATION = "22P02"
 
+# Postgres SQLSTATE for a foreign key violation — hit when a body field that's
+# supposed to reference another row (company_id, company_unit_id, ...) is a
+# well-formed UUID that just doesn't exist. Same class of issue as above: an
+# input-validation failure, not a server error.
+FOREIGN_KEY_VIOLATION = "23503"
+
 
 class NotFoundError(Exception):
     pass
@@ -42,6 +48,11 @@ def register_exception_handlers(app: FastAPI) -> None:
     async def postgrest_api_error_handler(request: Request, exc: APIError) -> JSONResponse:
         if exc.code == INVALID_TEXT_REPRESENTATION:
             return JSONResponse(status_code=404, content={"detail": "Resource not found"})
+
+        if exc.code == FOREIGN_KEY_VIOLATION:
+            return JSONResponse(
+                status_code=404, content={"detail": "Referenced resource not found"}
+            )
 
         logger.error(
             "Unhandled PostgREST error on %s %s", request.method, request.url.path, exc_info=exc

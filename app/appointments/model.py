@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime
 from enum import StrEnum
 from typing import Any
 
@@ -15,7 +15,16 @@ class AppointmentStatus(StrEnum):
 @dataclass(frozen=True, slots=True)
 class Appointment:
     id: str
-    customer_id: str
+    company_id: str
+    company_unit_id: str
+    # Quem marcou o horário, antes de virar cliente. Preenchido sempre, mesmo
+    # depois de customer_id ser setado (histórico do que foi informado na hora).
+    lead_full_name: str
+    lead_date_of_birth: date
+    lead_phone: str | None
+    # Nulo até o agendamento ser marcado como `completed` (compareceu) — só
+    # nesse momento o lead vira de fato um registro em `customers`.
+    customer_id: str | None
     created_by_user_id: str
     updated_by_user_id: str | None
     scheduled_at: datetime
@@ -29,7 +38,12 @@ class Appointment:
     def from_row(cls, row: dict[str, Any]) -> "Appointment":
         return cls(
             id=row["id"],
-            customer_id=row["customer_id"],
+            company_id=row["company_id"],
+            company_unit_id=row["company_unit_id"],
+            lead_full_name=row["lead_full_name"],
+            lead_date_of_birth=date.fromisoformat(row["lead_date_of_birth"]),
+            lead_phone=row.get("lead_phone"),
+            customer_id=row.get("customer_id"),
             created_by_user_id=row["created_by_user_id"],
             updated_by_user_id=row.get("updated_by_user_id"),
             scheduled_at=datetime.fromisoformat(row["scheduled_at"]),

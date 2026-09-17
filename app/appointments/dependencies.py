@@ -35,12 +35,9 @@ def get_appointment_history_service(
         AppointmentHistoryRepository, Depends(get_appointment_history_repository)
     ],
     appointment_repository: Annotated[AppointmentRepository, Depends(get_appointment_repository)],
-    customer_repository: Annotated[CustomerRepository, Depends(get_customer_repository)],
     company_user_service: Annotated[CompanyUserService, Depends(get_company_user_service)],
 ) -> AppointmentHistoryService:
-    return AppointmentHistoryService(
-        repository, appointment_repository, customer_repository, company_user_service
-    )
+    return AppointmentHistoryService(repository, appointment_repository, company_user_service)
 
 
 AppointmentHistoryServiceDep = Annotated[

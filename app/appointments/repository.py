@@ -26,7 +26,7 @@ class AppointmentRepository:
         except APIError as exc:
             if exc.code == UNIQUE_VIOLATION:
                 raise AppointmentAlreadyExistsError(
-                    data["customer_id"], data["scheduled_at"]
+                    data.get("customer_id"), data["scheduled_at"]
                 ) from exc
             raise
         return Appointment.from_row(as_row(response.data[0]))
@@ -36,18 +36,19 @@ class AppointmentRepository:
         *,
         page: int,
         page_size: int,
+        company_id: str | None = None,
+        company_unit_id: str | None = None,
         customer_id: str | None = None,
-        customer_ids: list[str] | None = None,
         status: AppointmentStatus | None = None,
     ) -> tuple[list[Appointment], int]:
         query = self.db.table(TABLE).select("*", count=CountMethod.exact).is_("deleted_at", "null")
 
+        if company_id is not None:
+            query = query.eq("company_id", company_id)
+        if company_unit_id is not None:
+            query = query.eq("company_unit_id", company_unit_id)
         if customer_id is not None:
             query = query.eq("customer_id", customer_id)
-        elif customer_ids is not None:
-            if not customer_ids:
-                return [], 0
-            query = query.in_("customer_id", customer_ids)
         if status is not None:
             query = query.eq("status", status.value)
 
@@ -80,6 +81,7 @@ class AppointmentRepository:
         status: str | None,
         notes: str | None,
         notes_provided: bool,
+        customer_id: str | None = None,
     ) -> Appointment | None:
         try:
             response = await self.db.rpc(
@@ -91,6 +93,7 @@ class AppointmentRepository:
                     "p_new_status": status,
                     "p_new_notes": notes,
                     "p_notes_provided": notes_provided,
+                    "p_customer_id": customer_id,
                 },
             ).execute()
         except APIError as exc:

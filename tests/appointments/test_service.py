@@ -1,4 +1,4 @@
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from typing import Any
 
 import pytest
@@ -9,12 +9,14 @@ from app.appointments.schema import AppointmentCreate, AppointmentUpdate
 from app.appointments.service import AppointmentHistoryService, AppointmentService
 from app.companies.model import CompanyUserLink
 from app.companies.service import CompanyUserService
-from app.customers.exceptions import CustomerNotFoundError
+from app.core.exceptions import ForbiddenError
 from app.customers.model import Customer
 from app.users.model import User, UserRole
 
 COMPANY_ID = "company-a"
 UNIT_ID = "unit-a1"
+LEAD_NAME = "Ana Silva"
+LEAD_DOB = date(1990, 1, 1)
 
 
 class FakeAppointmentRepository:
@@ -27,6 +29,7 @@ class FakeAppointmentRepository:
         now = datetime.now(UTC).isoformat()
         row = {
             "id": appointment_id,
+            "customer_id": None,
             "updated_by_user_id": None,
             "status": AppointmentStatus.SCHEDULED.value,
             "notes": None,
@@ -53,6 +56,7 @@ class FakeAppointmentRepository:
         status: str | None,
         notes: str | None,
         notes_provided: bool,
+        customer_id: str | None = None,
     ) -> Appointment | None:
         row = self.rows.get(appointment_id)
         if row is None or row["deleted_at"] is not None:
@@ -65,6 +69,8 @@ class FakeAppointmentRepository:
             row["status"] = status
         if notes_provided:
             row["notes"] = notes
+        if customer_id is not None:
+            row["customer_id"] = customer_id
         row["updated_by_user_id"] = changed_by_user_id
 
         self.history.append(
@@ -107,26 +113,35 @@ class FakeAppointmentHistoryRepository:
 
 
 class FakeCustomerRepository:
-    def __init__(self, known_customer_ids: set[str]) -> None:
-        self.known_customer_ids = known_customer_ids
+    def __init__(self) -> None:
+        self.rows: dict[str, dict[str, Any]] = {}
 
-    async def get_by_id(self, customer_id: str) -> Customer | None:
-        if customer_id not in self.known_customer_ids:
-            return None
-        now = datetime.now(UTC)
-        return Customer(
-            id=customer_id,
-            company_id=COMPANY_ID,
-            company_unit_id=UNIT_ID,
-            full_name="Ana Silva",
-            date_of_birth=now.date(),
-            phone=None,
-            created_by_user_id="user-1",
-            updated_by_user_id=None,
-            created_at=now,
-            updated_at=now,
-            deleted_at=None,
-        )
+    async def get_by_identity(
+        self, *, company_id: str, full_name: str, date_of_birth: str
+    ) -> Customer | None:
+        for row in self.rows.values():
+            if (
+                row["deleted_at"] is None
+                and row["company_id"] == company_id
+                and row["full_name"] == full_name
+                and row["date_of_birth"] == date_of_birth
+            ):
+                return Customer.from_row(row)
+        return None
+
+    async def create(self, data: dict[str, Any]) -> Customer:
+        customer_id = str(len(self.rows) + 1)
+        now = datetime.now(UTC).isoformat()
+        row = {
+            "id": customer_id,
+            "updated_by_user_id": None,
+            "created_at": now,
+            "updated_at": now,
+            "deleted_at": None,
+            **data,
+        }
+        self.rows[customer_id] = row
+        return Customer.from_row(row)
 
 
 class FakeCompanyUserRepository:
@@ -135,6 +150,39 @@ class FakeCompanyUserRepository:
 
     async def get_all_for_user(self, user_id: str) -> list[CompanyUserLink]:
         return [link for link in self.links if link.user_id == user_id]
+
+
+def _company_user_service(links: list[CompanyUserLink]) -> CompanyUserService:
+    return CompanyUserService(
+        FakeCompanyUserRepository(links),  # type: ignore[arg-type]
+        None,  # type: ignore[arg-type]
+        None,  # type: ignore[arg-type]
+        None,  # type: ignore[arg-type]
+    )
+
+
+def _link(user_id: str, company_id: str, unit_id: str | None) -> CompanyUserLink:
+    now = datetime.now(UTC)
+    return CompanyUserLink(
+        id=f"{user_id}-{company_id}-{unit_id}",
+        company_id=company_id,
+        user_id=user_id,
+        unit_id=unit_id,
+        granted_by_user_id="granter",
+        created_at=now,
+        updated_at=now,
+        deleted_at=None,
+    )
+
+
+def _lead_create(**overrides: Any) -> AppointmentCreate:
+    data = {
+        "lead_full_name": LEAD_NAME,
+        "lead_date_of_birth": LEAD_DOB,
+        "scheduled_at": datetime.now(UTC),
+        **overrides,
+    }
+    return AppointmentCreate(**data)
 
 
 @pytest.fixture
@@ -158,52 +206,34 @@ def appointment_repository() -> FakeAppointmentRepository:
 
 
 @pytest.fixture
+def customer_repository() -> FakeCustomerRepository:
+    return FakeCustomerRepository()
+
+
+@pytest.fixture
 def service(
-    appointment_repository: FakeAppointmentRepository, current_user: User
+    appointment_repository: FakeAppointmentRepository,
+    customer_repository: FakeCustomerRepository,
+    current_user: User,
 ) -> AppointmentService:
-    now = datetime.now(UTC)
-    link = CompanyUserLink(
-        id="link-1",
-        company_id=COMPANY_ID,
-        user_id=current_user.id,
-        unit_id=UNIT_ID,
-        granted_by_user_id="granter",
-        created_at=now,
-        updated_at=now,
-        deleted_at=None,
-    )
-    company_user_service = CompanyUserService(
-        FakeCompanyUserRepository([link]),  # type: ignore[arg-type]
-        None,  # type: ignore[arg-type]
-        None,  # type: ignore[arg-type]
-        None,  # type: ignore[arg-type]
-    )
+    company_user_service = _company_user_service([_link(current_user.id, COMPANY_ID, UNIT_ID)])
     return AppointmentService(
         appointment_repository,  # type: ignore[arg-type]
-        FakeCustomerRepository({"customer-1"}),  # type: ignore[arg-type]
+        customer_repository,  # type: ignore[arg-type]
         company_user_service,
     )
 
 
-async def test_create_appointment_for_known_customer(
-    service: AppointmentService, current_user: User
-) -> None:
-    created = await service.create(
-        AppointmentCreate(customer_id="customer-1", scheduled_at=datetime.now(UTC)), current_user
-    )
+async def test_create_appointment_as_lead(service: AppointmentService, current_user: User) -> None:
+    created = await service.create(_lead_create(), current_user)
 
-    assert created.customer_id == "customer-1"
+    assert created.lead_full_name == LEAD_NAME
+    assert created.lead_date_of_birth == LEAD_DOB
+    assert created.customer_id is None
+    assert created.company_id == COMPANY_ID
+    assert created.company_unit_id == UNIT_ID
     assert created.created_by_user_id == current_user.id
     assert created.status == AppointmentStatus.SCHEDULED
-
-
-async def test_create_appointment_for_unknown_customer_raises(
-    service: AppointmentService, current_user: User
-) -> None:
-    with pytest.raises(CustomerNotFoundError):
-        await service.create(
-            AppointmentCreate(customer_id="missing", scheduled_at=datetime.now(UTC)), current_user
-        )
 
 
 async def test_get_by_id_missing_raises_not_found(
@@ -215,9 +245,8 @@ async def test_get_by_id_missing_raises_not_found(
 
 async def test_create_appointment_without_unit_access_forbidden(
     appointment_repository: FakeAppointmentRepository,
+    customer_repository: FakeCustomerRepository,
 ) -> None:
-    from app.core.exceptions import ForbiddenError
-
     now = datetime.now(UTC)
     outsider = User(
         id="user-2",
@@ -229,42 +258,92 @@ async def test_create_appointment_without_unit_access_forbidden(
         updated_at=now,
         deleted_at=None,
     )
-    company_user_service = CompanyUserService(
-        FakeCompanyUserRepository([]),  # type: ignore[arg-type]
-        None,  # type: ignore[arg-type]
-        None,  # type: ignore[arg-type]
-        None,  # type: ignore[arg-type]
-    )
     service = AppointmentService(
         appointment_repository,  # type: ignore[arg-type]
-        FakeCustomerRepository({"customer-1"}),  # type: ignore[arg-type]
-        company_user_service,
+        customer_repository,  # type: ignore[arg-type]
+        _company_user_service([]),
     )
 
     with pytest.raises(ForbiddenError):
-        await service.create(
-            AppointmentCreate(customer_id="customer-1", scheduled_at=datetime.now(UTC)), outsider
-        )
+        await service.create(_lead_create(company_id=COMPANY_ID, company_unit_id=UNIT_ID), outsider)
 
 
-async def test_update_status_records_history(
+async def test_update_status_confirmed_does_not_create_customer(
     service: AppointmentService,
     appointment_repository: FakeAppointmentRepository,
+    customer_repository: FakeCustomerRepository,
     current_user: User,
 ) -> None:
-    created = await service.create(
-        AppointmentCreate(customer_id="customer-1", scheduled_at=datetime.now(UTC)), current_user
-    )
+    created = await service.create(_lead_create(), current_user)
 
     updated = await service.update(
         created.id, AppointmentUpdate(status=AppointmentStatus.CONFIRMED), current_user
     )
 
     assert updated.status == AppointmentStatus.CONFIRMED
-    assert updated.updated_by_user_id == current_user.id
-    assert len(appointment_repository.history) == 1
+    assert updated.customer_id is None
+    assert customer_repository.rows == {}
     assert appointment_repository.history[0]["previous_status"] == AppointmentStatus.SCHEDULED.value
-    assert appointment_repository.history[0]["new_status"] == AppointmentStatus.CONFIRMED.value
+
+
+async def test_update_status_completed_promotes_lead_to_customer(
+    service: AppointmentService,
+    customer_repository: FakeCustomerRepository,
+    current_user: User,
+) -> None:
+    created = await service.create(_lead_create(), current_user)
+
+    updated = await service.update(
+        created.id, AppointmentUpdate(status=AppointmentStatus.COMPLETED), current_user
+    )
+
+    assert updated.status == AppointmentStatus.COMPLETED
+    assert updated.customer_id is not None
+    customer = customer_repository.rows[updated.customer_id]
+    assert customer["full_name"] == LEAD_NAME
+    assert customer["company_id"] == COMPANY_ID
+    assert customer["company_unit_id"] == UNIT_ID
+
+
+async def test_update_status_completed_reuses_existing_customer(
+    service: AppointmentService,
+    customer_repository: FakeCustomerRepository,
+    current_user: User,
+) -> None:
+    existing_customer = await customer_repository.create(
+        {
+            "company_id": COMPANY_ID,
+            "company_unit_id": UNIT_ID,
+            "full_name": LEAD_NAME,
+            "date_of_birth": LEAD_DOB.isoformat(),
+            "phone": None,
+            "created_by_user_id": current_user.id,
+        }
+    )
+
+    created = await service.create(_lead_create(), current_user)
+    updated = await service.update(
+        created.id, AppointmentUpdate(status=AppointmentStatus.COMPLETED), current_user
+    )
+
+    assert updated.customer_id == existing_customer.id
+    assert len(customer_repository.rows) == 1
+
+
+async def test_update_status_no_show_does_not_create_customer(
+    service: AppointmentService,
+    customer_repository: FakeCustomerRepository,
+    current_user: User,
+) -> None:
+    created = await service.create(_lead_create(), current_user)
+
+    updated = await service.update(
+        created.id, AppointmentUpdate(status=AppointmentStatus.NO_SHOW), current_user
+    )
+
+    assert updated.status == AppointmentStatus.NO_SHOW
+    assert updated.customer_id is None
+    assert customer_repository.rows == {}
 
 
 async def test_update_missing_appointment_raises_not_found(
@@ -279,9 +358,7 @@ async def test_update_missing_appointment_raises_not_found(
 async def test_delete_then_get_by_id_raises_not_found(
     service: AppointmentService, current_user: User
 ) -> None:
-    created = await service.create(
-        AppointmentCreate(customer_id="customer-1", scheduled_at=datetime.now(UTC)), current_user
-    )
+    created = await service.create(_lead_create(), current_user)
 
     await service.delete(created.id, current_user)
 
@@ -294,34 +371,15 @@ async def test_history_service_returns_entries_for_existing_appointment(
     appointment_repository: FakeAppointmentRepository,
     current_user: User,
 ) -> None:
-    created = await service.create(
-        AppointmentCreate(customer_id="customer-1", scheduled_at=datetime.now(UTC)), current_user
-    )
+    created = await service.create(_lead_create(), current_user)
     await service.update(
         created.id, AppointmentUpdate(status=AppointmentStatus.CONFIRMED), current_user
     )
 
-    now = datetime.now(UTC)
-    link = CompanyUserLink(
-        id="link-1",
-        company_id=COMPANY_ID,
-        user_id=current_user.id,
-        unit_id=UNIT_ID,
-        granted_by_user_id="granter",
-        created_at=now,
-        updated_at=now,
-        deleted_at=None,
-    )
-    company_user_service = CompanyUserService(
-        FakeCompanyUserRepository([link]),  # type: ignore[arg-type]
-        None,  # type: ignore[arg-type]
-        None,  # type: ignore[arg-type]
-        None,  # type: ignore[arg-type]
-    )
+    company_user_service = _company_user_service([_link(current_user.id, COMPANY_ID, UNIT_ID)])
     history_service = AppointmentHistoryService(
         FakeAppointmentHistoryRepository(appointment_repository),  # type: ignore[arg-type]
         appointment_repository,  # type: ignore[arg-type]
-        FakeCustomerRepository({"customer-1"}),  # type: ignore[arg-type]
         company_user_service,
     )
 
@@ -334,17 +392,10 @@ async def test_history_service_returns_entries_for_existing_appointment(
 async def test_history_service_unknown_appointment_raises_not_found(
     appointment_repository: FakeAppointmentRepository, current_user: User
 ) -> None:
-    company_user_service = CompanyUserService(
-        FakeCompanyUserRepository([]),  # type: ignore[arg-type]
-        None,  # type: ignore[arg-type]
-        None,  # type: ignore[arg-type]
-        None,  # type: ignore[arg-type]
-    )
     history_service = AppointmentHistoryService(
         FakeAppointmentHistoryRepository(appointment_repository),  # type: ignore[arg-type]
         appointment_repository,  # type: ignore[arg-type]
-        FakeCustomerRepository({"customer-1"}),  # type: ignore[arg-type]
-        company_user_service,
+        _company_user_service([]),
     )
 
     with pytest.raises(AppointmentNotFoundError):

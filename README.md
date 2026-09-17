@@ -5,8 +5,8 @@ API multi-tenant para clínicas/óticas com múltiplas empresas e unidades — c
 ```
 company (empresa)
   └── company_unit (unidade/filial)
-        └── customer (cliente, cadastrado numa unidade específica)
-              └── appointment (agendamento, herda empresa/unidade do cliente)
+        ├── appointment (agendamento — empresa/unidade próprias, cliente opcional)
+        └── customer (cliente, só passa a existir a partir de um agendamento completed)
 ```
 
 Documentação completa: **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**.

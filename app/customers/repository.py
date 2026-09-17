@@ -61,6 +61,21 @@ class CustomerRepository:
         response = await query.execute()
         return [row["id"] for row in as_rows(response.data)]
 
+    async def get_by_identity(
+        self, *, company_id: str, full_name: str, date_of_birth: str
+    ) -> Customer | None:
+        response = (
+            await self.db.table(TABLE)
+            .select("*")
+            .eq("company_id", company_id)
+            .eq("full_name", full_name)
+            .eq("date_of_birth", date_of_birth)
+            .is_("deleted_at", "null")
+            .maybe_single()
+            .execute()
+        )
+        return Customer.from_row(as_row(response.data)) if response else None
+
     async def get_by_id(self, customer_id: str) -> Customer | None:
         response = (
             await self.db.table(TABLE)

@@ -35,8 +35,8 @@ direto no banco (veja `db/migrations/README.md`).
 ```
 company (empresa)
   └── company_unit (unidade/filial)
-        └── customer (cliente, cadastrado numa unidade especifica)
-              └── appointment (agendamento, herda empresa/unidade do cliente)
+        ├── appointment (agendamento — empresa/unidade próprias, cliente opcional)
+        └── customer (cliente, só existe a partir de um agendamento completed)
 ```
 
 O acesso de um usuário a uma empresa/unidade vem de `company_users`
@@ -64,6 +64,14 @@ Toda edição de um agendamento (`PUT /appointments/{id}`) grava
 automaticamente uma linha em `appointment_history` (imutável, somente
 leitura via `GET /appointments/{id}/history`), na mesma transação da
 atualização — não é uma chamada separada da aplicação.
+
+## De lead a cliente
+
+`POST /appointments` não recebe `customer_id` — recebe nome, data de
+nascimento e telefone de quem está marcando (`lead_full_name`/
+`lead_date_of_birth`/`lead_phone`). Esse lead só vira um registro em
+`customers` quando o agendamento é marcado `completed` (compareceu) via
+`PUT /appointments/{id}`; `cancelled`/`no_show` nunca geram cliente.
 """.strip()
 
 OPENAPI_TAGS = [
@@ -87,13 +95,17 @@ OPENAPI_TAGS = [
     },
     {
         "name": "customers",
-        "description": "Clientes atendidos (pacientes), cadastrados numa empresa/unidade.",
+        "description": (
+            "Clientes atendidos. Só passam a existir aqui quando um agendamento (lead) "
+            "é marcado `completed` — não há cadastro direto de cliente sem agendamento."
+        ),
     },
     {
         "name": "appointments",
         "description": (
-            "Agendamentos, escopados à empresa/unidade do cliente. Toda edição gera uma "
-            "linha imutável de auditoria em `appointment_history`."
+            "Agendamentos, escopados à empresa/unidade própria. Começam como lead (nome/"
+            "nascimento/telefone no próprio agendamento); viram cliente ao serem marcados "
+            "`completed`. Toda edição gera uma linha imutável em `appointment_history`."
         ),
     },
 ]

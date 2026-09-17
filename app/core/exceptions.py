@@ -18,6 +18,17 @@ INVALID_TEXT_REPRESENTATION = "22P02"
 # input-validation failure, not a server error.
 FOREIGN_KEY_VIOLATION = "23503"
 
+# Default SQLSTATE for a bare `RAISE EXCEPTION` with no explicit ERRCODE — every
+# validation/authorization trigger across the migrations (parent-active checks,
+# "does not belong to company", manager-requires-unit, unit-access checks, ...)
+# raises this way. These triggers run BEFORE the table's own FK constraints get
+# a chance to fire, so a nonexistent-parent case (company_id/company_unit_id
+# that's a well-formed UUID but doesn't exist) surfaces as P0001 here, not as
+# 23503 above — the messages only ever echo back IDs/state the caller already
+# submitted or a plain business-rule description, never anything sensitive, so
+# passing them through as `detail` is safe and more useful than a blanket 500.
+BUSINESS_RULE_VIOLATION = "P0001"
+
 
 class NotFoundError(Exception):
     pass
@@ -53,6 +64,9 @@ def register_exception_handlers(app: FastAPI) -> None:
             return JSONResponse(
                 status_code=404, content={"detail": "Referenced resource not found"}
             )
+
+        if exc.code == BUSINESS_RULE_VIOLATION:
+            return JSONResponse(status_code=400, content={"detail": exc.message or "Bad request"})
 
         logger.error(
             "Unhandled PostgREST error on %s %s", request.method, request.url.path, exc_info=exc

@@ -30,6 +30,27 @@ def test_foreign_key_violation_returns_404() -> None:
     assert response.json() == {"detail": "Referenced resource not found"}
 
 
+def test_business_rule_violation_returns_400_with_message() -> None:
+    app = FastAPI()
+    register_exception_handlers(app)
+
+    @app.get("/boom")
+    async def boom() -> None:
+        raise APIError(
+            {
+                "message": "unit X does not belong to company Y",
+                "code": "P0001",
+                "hint": None,
+                "details": None,
+            }
+        )
+
+    client = TestClient(app, raise_server_exceptions=False)
+    response = client.get("/boom")
+    assert response.status_code == 400
+    assert response.json() == {"detail": "unit X does not belong to company Y"}
+
+
 def test_unexpected_postgrest_error_returns_generic_500() -> None:
     client = _make_client("XX000")
     response = client.get("/boom")

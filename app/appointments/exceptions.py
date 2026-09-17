@@ -8,7 +8,7 @@ class AppointmentNotFoundError(Exception):
 
 
 class AppointmentAlreadyExistsError(Exception):
-    def __init__(self, customer_id: str, scheduled_at: str) -> None:
+    def __init__(self, customer_id: str | None, scheduled_at: str) -> None:
         super().__init__(
             f"Customer {customer_id} already has an active appointment at {scheduled_at}"
         )

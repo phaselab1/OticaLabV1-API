@@ -23,13 +23,13 @@ Documentação completa da implementação: stack, camadas, modelo de domínio, 
 
 ## Visão geral
 
-Sistema multi-tenant para clínicas/óticas com múltiplas empresas (`companies`) e unidades (`company_units`). Cada empresa pode ter várias unidades; cada cliente (`customers`) é cadastrado numa unidade específica; cada agendamento (`appointments`) herda a empresa/unidade do seu cliente.
+Sistema multi-tenant para clínicas/óticas com múltiplas empresas (`companies`) e unidades (`company_units`). Um agendamento (`appointments`) é criado direto numa unidade, com os dados de quem marcou (nome, nascimento, telefone) guardados nele mesmo — ainda como **lead**, sem linha em `customers`. Só quando o agendamento é marcado `completed` (compareceu) é que o lead vira de fato um cliente (veja [De lead a cliente](#de-lead-a-cliente)).
 
 ```
 company (empresa)
   └── company_unit (unidade/filial)
-        └── customer (cliente, cadastrado numa unidade específica)
-              └── appointment (agendamento, herda empresa/unidade do cliente)
+        ├── appointment (agendamento — empresa/unidade próprias, cliente opcional)
+        └── customer (cliente, só passa a existir a partir de um appointment completed)
 ```
 
 O acesso de um usuário a uma empresa/unidade é controlado por vínculos em `company_users`, exceto para `super_admin`, que tem acesso global sem precisar de vínculo explícito.
@@ -109,7 +109,9 @@ erDiagram
     users ||--o{ company_users : "usuário vinculado"
     companies ||--o{ customers : "tem"
     company_units ||--o{ customers : "cadastrado em"
-    customers ||--o{ appointments : "tem"
+    companies ||--o{ appointments : "tem"
+    company_units ||--o{ appointments : "marcado em"
+    customers |o--o{ appointments : "promovido a partir de (opcional)"
     appointments ||--o{ appointment_history : "auditoria"
     users ||--o{ appointments : "created_by/updated_by"
     users ||--o{ appointment_history : "changed_by"
@@ -160,7 +162,12 @@ erDiagram
     }
     appointments {
         uuid id PK
-        uuid customer_id FK
+        uuid company_id FK
+        uuid company_unit_id FK
+        varchar lead_full_name "nome de quem marcou"
+        date lead_date_of_birth
+        varchar lead_phone
+        uuid customer_id FK "nullable — só após completed"
         uuid created_by_user_id FK
         uuid updated_by_user_id FK
         timestamptz scheduled_at
@@ -267,6 +274,14 @@ update_appointment_with_history(p_appointment_id, p_changed_by_user_id, ...)
 ```
 
 chamada via `client.rpc(...)` em [`app/appointments/repository.py`](../app/appointments/repository.py). Ela faz `SELECT ... FOR UPDATE`, o `UPDATE`, e o `INSERT` do histórico dentro da mesma transação SQL, e levanta `ERRCODE = 'P0002'` se o agendamento não existir — traduzido pela aplicação em `404`.
+
+### De lead a cliente
+
+`POST /appointments` não recebe `customer_id` — recebe `lead_full_name`/`lead_date_of_birth`/`lead_phone`, guardados direto no agendamento. Enquanto o status não é `completed`, não existe nenhuma linha em `customers`: é só um lead.
+
+Quando `PUT /appointments/{id}` marca `status: "completed"` pela primeira vez, `AppointmentService._promote_lead_to_customer` procura um cliente já existente com o mesmo nome + nascimento nesta empresa (`CustomerRepository.get_by_identity`) — se achar, reaproveita; senão cria um novo — e passa o `customer_id` resultante para `update_appointment_with_history` (parâmetro `p_customer_id`, adicionado na migration [`0004_appointment_leads.sql`](../db/migrations/0004_appointment_leads.sql)), que faz `COALESCE(p_customer_id, customer_id)` no mesmo `UPDATE` do status/histórico. `cancelled`/`no_show` nunca promovem o lead.
+
+A busca do cliente existente e a criação/atualização do agendamento são duas chamadas HTTP separadas (limitação do PostgREST — só a segunda parte, `UPDATE` + histórico, é atômica via RPC). Na pior hipótese de falha entre as duas chamadas, um cliente pode ficar criado sem o agendamento ainda referenciá-lo; não há perda de dado nem estado inconsistente de autorização, só uma reconciliação manual pontual.
 
 ## Tratamento de erros
 

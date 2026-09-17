@@ -25,10 +25,14 @@ AppointmentIdPath = Annotated[str, Path(description="UUID do agendamento.")]
     status_code=status.HTTP_201_CREATED,
     summary="Criar agendamento",
     responses={
+        400: {
+            "description": (
+                "`company_id`/`company_unit_id` não informados e não puderam ser "
+                "deduzidos automaticamente a partir do papel/vínculos do usuário."
+            )
+        },
         401: {"description": "Token ausente ou inválido."},
-        403: {"description": "Usuário não tem acesso à unidade deste cliente."},
-        404: {"description": "Cliente não encontrado (ou soft-deletado)."},
-        409: {"description": "Este cliente já tem um agendamento ativo neste exato horário."},
+        403: {"description": "Usuário não tem acesso à empresa/unidade informada."},
         422: {"description": "Dados inválidos."},
     },
 )
@@ -36,10 +40,20 @@ async def create_appointment(
     data: AppointmentCreate, service: AppointmentServiceDep, current_user: CurrentUser
 ) -> Appointment:
     """
-    Cria um agendamento para um cliente. Empresa/unidade do agendamento
-    são herdadas do cliente (não são informadas na requisição).
-    `created_by_user_id` vem do usuário autenticado; status inicial é
-    sempre `scheduled`.
+    Cria um agendamento para um LEAD — não exige (nem aceita) um
+    `customer_id`. Quem está marcando o horário ainda não é um cliente:
+    nome, data de nascimento e telefone ficam guardados no próprio
+    agendamento (`lead_full_name`/`lead_date_of_birth`/`lead_phone`), sem
+    nenhuma linha criada em `customers`.
+
+    O lead só vira cliente de verdade quando o agendamento é marcado como
+    `completed` (compareceu) via `PUT /appointments/{id}` — veja a
+    descrição desse campo lá.
+
+    `company_id`/`company_unit_id` seguem a mesma regra de
+    auto-preenchimento por papel do usuário usada em `POST /customers`.
+    `created_by_user_id` vem sempre do usuário autenticado; status
+    inicial é sempre `scheduled`.
     """
     return await service.create(data, current_user)
 
@@ -141,6 +155,12 @@ async def update_appointment(
     uma segunda chamada da aplicação, é uma function no próprio Postgres
     que garante que o `UPDATE` e o registro de auditoria acontecem juntos
     ou não acontecem. `updated_by_user_id` vem do usuário autenticado.
+
+    Marcar `status: "completed"` (compareceu) pela primeira vez promove o
+    lead a cliente: a API cria (ou reaproveita, se já existir pelo nome +
+    nascimento nesta empresa) a linha em `customers` e liga `customer_id`
+    ao agendamento — sem chamada extra do cliente da API. `cancelled` e
+    `no_show` nunca geram cliente.
     """
     return await service.update(appointment_id, data, current_user)
 

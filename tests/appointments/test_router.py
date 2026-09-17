@@ -8,11 +8,13 @@ from app.appointments.dependencies import get_appointment_history_service, get_a
 from app.appointments.exceptions import AppointmentNotFoundError
 from app.appointments.model import Appointment, AppointmentHistoryEntry, AppointmentStatus
 from app.appointments.schema import AppointmentCreate, AppointmentUpdate
-from app.customers.exceptions import CustomerNotFoundError
 from app.main import app
 from app.shared.pagination import Page
 from app.users.dependencies import get_current_user
 from app.users.model import User, UserRole
+
+COMPANY_ID = "company-a"
+UNIT_ID = "unit-a1"
 
 
 def _fake_user() -> User:
@@ -32,16 +34,18 @@ def _fake_user() -> User:
 class FakeAppointmentService:
     def __init__(self) -> None:
         self.rows: dict[str, Appointment] = {}
-        self.known_customer_ids = {"customer-1"}
+        self.next_customer_id = 1
 
     async def create(self, data: AppointmentCreate, current_user: User) -> Appointment:
-        if data.customer_id not in self.known_customer_ids:
-            raise CustomerNotFoundError(data.customer_id)
-
         now = datetime.now(UTC)
         appointment = Appointment(
             id=str(len(self.rows) + 1),
-            customer_id=data.customer_id,
+            company_id=data.company_id or COMPANY_ID,
+            company_unit_id=data.company_unit_id or UNIT_ID,
+            lead_full_name=data.lead_full_name,
+            lead_date_of_birth=data.lead_date_of_birth,
+            lead_phone=data.lead_phone,
+            customer_id=None,
             created_by_user_id=current_user.id,
             updated_by_user_id=None,
             scheduled_at=data.scheduled_at,
@@ -69,7 +73,15 @@ class FakeAppointmentService:
     ) -> Appointment:
         appointment = await self.get_by_id(appointment_id, current_user)
         changes = data.model_dump(exclude_unset=True)
-        updated = replace(appointment, updated_by_user_id=current_user.id, **changes)
+
+        customer_id = appointment.customer_id
+        if changes.get("status") == AppointmentStatus.COMPLETED and customer_id is None:
+            customer_id = f"customer-{self.next_customer_id}"
+            self.next_customer_id += 1
+
+        updated = replace(
+            appointment, updated_by_user_id=current_user.id, customer_id=customer_id, **changes
+        )
         self.rows[appointment_id] = updated
         return updated
 
@@ -112,36 +124,32 @@ def client() -> TestClient:
     app.dependency_overrides.clear()
 
 
+LEAD_PAYLOAD = {
+    "lead_full_name": "Ana Silva",
+    "lead_date_of_birth": "1990-01-01",
+    "scheduled_at": "2026-01-01T10:00:00Z",
+    "company_id": COMPANY_ID,
+    "company_unit_id": UNIT_ID,
+}
+
+
 def test_create_appointment_requires_auth(client: TestClient) -> None:
     del app.dependency_overrides[get_current_user]
 
-    response = client.post(
-        "/appointments/",
-        json={"customer_id": "customer-1", "scheduled_at": "2026-01-01T10:00:00Z"},
-    )
+    response = client.post("/appointments/", json=LEAD_PAYLOAD)
 
     assert response.status_code == 401
 
 
-def test_create_appointment_for_known_customer(client: TestClient) -> None:
-    response = client.post(
-        "/appointments/",
-        json={"customer_id": "customer-1", "scheduled_at": "2026-01-01T10:00:00Z"},
-    )
+def test_create_appointment_as_lead(client: TestClient) -> None:
+    response = client.post("/appointments/", json=LEAD_PAYLOAD)
 
     assert response.status_code == 201
     body = response.json()
     assert body["status"] == "scheduled"
     assert body["created_by_user_id"] == "user-1"
-
-
-def test_create_appointment_for_unknown_customer(client: TestClient) -> None:
-    response = client.post(
-        "/appointments/",
-        json={"customer_id": "missing", "scheduled_at": "2026-01-01T10:00:00Z"},
-    )
-
-    assert response.status_code == 404
+    assert body["lead_full_name"] == "Ana Silva"
+    assert body["customer_id"] is None
 
 
 def test_get_appointment_not_found(client: TestClient) -> None:
@@ -150,17 +158,25 @@ def test_get_appointment_not_found(client: TestClient) -> None:
     assert response.status_code == 404
 
 
-def test_update_appointment_status(client: TestClient) -> None:
-    created = client.post(
-        "/appointments/",
-        json={"customer_id": "customer-1", "scheduled_at": "2026-01-01T10:00:00Z"},
-    ).json()
+def test_update_appointment_status_confirmed_keeps_lead(client: TestClient) -> None:
+    created = client.post("/appointments/", json=LEAD_PAYLOAD).json()
 
     updated = client.put(f"/appointments/{created['id']}", json={"status": "confirmed"})
 
     assert updated.status_code == 200
     assert updated.json()["status"] == "confirmed"
     assert updated.json()["updated_by_user_id"] == "user-1"
+    assert updated.json()["customer_id"] is None
+
+
+def test_update_appointment_status_completed_promotes_to_customer(client: TestClient) -> None:
+    created = client.post("/appointments/", json=LEAD_PAYLOAD).json()
+
+    updated = client.put(f"/appointments/{created['id']}", json={"status": "completed"})
+
+    assert updated.status_code == 200
+    assert updated.json()["status"] == "completed"
+    assert updated.json()["customer_id"] is not None
 
 
 def test_get_appointment_history(client: TestClient) -> None:

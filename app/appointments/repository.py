@@ -103,6 +103,34 @@ class AppointmentRepository:
         rows = as_rows(response.data)
         return Appointment.from_row(rows[0]) if rows else None
 
+    async def update_lead_info(
+        self,
+        appointment_id: str,
+        changed_by_user_id: str,
+        *,
+        lead_full_name: str | None = None,
+        lead_phone: str | None = None,
+        lead_phone_provided: bool = False,
+    ) -> Appointment | None:
+        update_data: dict[str, Any] = {
+            "updated_by_user_id": changed_by_user_id,
+        }
+        if lead_full_name is not None:
+            update_data["lead_full_name"] = lead_full_name
+        if lead_phone_provided:
+            update_data["lead_phone"] = lead_phone
+
+        response = (
+            await self.db.table(TABLE)
+            .update(update_data)
+            .eq("id", appointment_id)
+            .is_("deleted_at", "null")
+            .execute()
+        )
+        if not response.data:
+            return None
+        return Appointment.from_row(as_row(response.data[0]))
+
     async def soft_delete(self, appointment_id: str) -> bool:
         response = (
             await self.db.table(TABLE)

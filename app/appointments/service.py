@@ -125,6 +125,23 @@ class AppointmentService:
 
         payload = data.model_dump(mode="json", exclude_unset=True)
 
+        if (
+            (existing.customer_id is not None or existing.status == AppointmentStatus.ATTENDED)
+            and ("lead_full_name" in payload or "lead_phone" in payload)
+        ):
+            raise ForbiddenError(
+                "Nome e telefone só podem ser alterados enquanto o agendamento não for cliente."
+            )
+
+        if "lead_full_name" in payload or "lead_phone" in payload:
+            await self.repository.update_lead_info(
+                appointment_id,
+                current_user.id,
+                lead_full_name=payload.get("lead_full_name"),
+                lead_phone=payload.get("lead_phone"),
+                lead_phone_provided="lead_phone" in payload,
+            )
+
         customer_id = None
         if (
             payload.get("status") == AppointmentStatus.ATTENDED.value

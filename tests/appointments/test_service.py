@@ -93,6 +93,25 @@ class FakeAppointmentRepository:
         )
         return Appointment.from_row(row)
 
+    async def update_lead_info(
+        self,
+        appointment_id: str,
+        changed_by_user_id: str,
+        *,
+        lead_full_name: str | None = None,
+        lead_phone: str | None = None,
+        lead_phone_provided: bool = False,
+    ) -> Appointment | None:
+        row = self.rows.get(appointment_id)
+        if row is None or row["deleted_at"] is not None:
+            return None
+        if lead_full_name is not None:
+            row["lead_full_name"] = lead_full_name
+        if lead_phone_provided:
+            row["lead_phone"] = lead_phone
+        row["updated_by_user_id"] = changed_by_user_id
+        return Appointment.from_row(row)
+
     async def soft_delete(self, appointment_id: str) -> bool:
         row = self.rows.get(appointment_id)
         if row is None or row["deleted_at"] is not None:
@@ -502,3 +521,56 @@ async def test_update_attended_appointment_allowed_for_admin(
         created.id, AppointmentUpdate(status=AppointmentStatus.CANCELLED), admin_user
     )
     assert updated.status == AppointmentStatus.CANCELLED
+
+
+async def test_update_lead_info_allowed_while_scheduled(
+    service: AppointmentService, current_user: User
+) -> None:
+    created = await service.create(_lead_create(), current_user)
+    updated = await service.update(
+        created.id,
+        AppointmentUpdate(lead_full_name="Carlos Eduardo", lead_phone="11912345678"),
+        current_user,
+    )
+    assert updated.lead_full_name == "Carlos Eduardo"
+    assert updated.lead_phone == "11912345678"
+
+
+async def test_update_lead_info_forbidden_after_customer(
+    appointment_repository: FakeAppointmentRepository,
+    customer_repository: FakeCustomerRepository,
+    current_user: User,
+) -> None:
+    admin_user = User(
+        id="admin-1",
+        full_name="Admin",
+        email="admin@example.com",
+        password_hash="hash",
+        role=UserRole.ADMIN,
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
+        deleted_at=None,
+    )
+    company_user_service = _company_user_service(
+        [
+            _link(current_user.id, COMPANY_ID, UNIT_ID),
+            _link(admin_user.id, COMPANY_ID, UNIT_ID),
+        ]
+    )
+    service = AppointmentService(
+        appointment_repository,  # type: ignore[arg-type]
+        customer_repository,  # type: ignore[arg-type]
+        company_user_service,
+    )
+    created = await service.create(_lead_create(), current_user)
+    await service.update(
+        created.id, AppointmentUpdate(status=AppointmentStatus.ATTENDED), current_user
+    )
+
+    with pytest.raises(ForbiddenError) as exc_info:
+        await service.update(
+            created.id,
+            AppointmentUpdate(lead_full_name="Nome Alterado"),
+            admin_user,
+        )
+    assert "cliente" in str(exc_info.value)

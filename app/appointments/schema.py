@@ -47,6 +47,16 @@ class AppointmentCreate(BaseModel):
 
 
 class AppointmentUpdate(BaseModel):
+    lead_full_name: str | None = Field(
+        default=None,
+        max_length=255,
+        description="Novo nome do lead, permitido apenas enquanto o lead não virou cliente.",
+    )
+    lead_phone: str | None = Field(
+        default=None,
+        pattern=PHONE_PATTERN,
+        description="Novo telefone do lead, só dígitos sem máscara.",
+    )
     scheduled_at: datetime | None = Field(
         default=None, description="Novo horário, se for reagendar."
     )

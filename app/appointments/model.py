@@ -6,9 +6,8 @@ from typing import Any
 
 class AppointmentStatus(StrEnum):
     SCHEDULED = "scheduled"
-    CONFIRMED = "confirmed"
+    ATTENDED = "attended"
     CANCELLED = "cancelled"
-    COMPLETED = "completed"
     NO_SHOW = "no_show"
 
 
@@ -21,7 +20,7 @@ class Appointment:
     # depois de customer_id ser setado (histórico do que foi informado na hora).
     lead_full_name: str
     lead_phone: str | None
-    # Nulo até o agendamento ser marcado como `completed` (compareceu) — só
+    # Nulo até o agendamento ser marcado como `attended` (compareceu) — só
     # nesse momento o lead vira de fato um registro em `customers`.
     customer_id: str | None
     created_by_user_id: str

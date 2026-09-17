@@ -2,7 +2,7 @@
   "info": {
     "_postman_id": "7a7cecfd-d620-4f2b-9168-f15921fc362b",
     "name": "Ótica Lab API",
-    "description": "API do Ótica Lab — sistema multi-tenant para clínicas/óticas com múltiplas empresas e unidades.\n\n## Como usar esta coleção\n\n1. Ajuste `base_url` (variável de coleção) para onde sua API está rodando.\n2. Preencha `login_email`/`login_password` com um usuário `super_admin`    existente (o primeiro é inserido manualmente no banco — veja    `db/migrations/README.md`).\n3. Rode **Auth > Login** — o token é salvo automaticamente em `access_token`    e reutilizado por todas as pastas seguintes (autenticação em nível de    coleção, tipo Bearer).\n4. As pastas seguem a ordem de dependência do domínio: Users -> Companies    (empresa -> unidade -> conceder acesso) -> Customers -> Appointments.    Cada request de criação salva o ID retornado numa variável de coleção    (`company_id`, `unit_id`, `customer_id`, `appointment_id`, etc.),    reutilizada automaticamente pelas próximas requisições — rode as pastas    em ordem, de cima para baixo, para popular a cadeia toda.\n5. Todo DELETE/revoke fica na última pasta, **Cleanup** — rode-a por    último. Não fica espalhado nas pastas de criação porque o runner do    Postman executa cada pasta inteira antes de passar pra próxima, e    Customers/Appointments ainda precisam da empresa/unidade existirem.\n\n## Hierarquia\n\n```\ncompany (empresa)\n  -> company_unit (unidade/filial)\n        -> appointment (agendamento — empresa/unidade próprias, cliente opcional)\n        -> customer (cliente — cadastro direto OU criado ao completar um agendamento)\n```\n\nUm agendamento (`appointments`) começa como LEAD: nome e telefone de quem está\nmarcando ficam guardados nele mesmo, sem nenhuma linha em `customers`.\nSó quando o agendamento é marcado `completed` (compareceu) é que a API cria (ou\nreaproveita, se já existir pelo nome na empresa) o cliente de fato.\n`cancelled`/`no_show` nunca geram cliente.\n\n## Papéis (roles)\n\n- **super_admin** — acesso global; deve informar `company_id`/`company_unit_id`   explicitamente ao cadastrar cliente.\n- **admin** — acesso a toda a empresa vinculada; empresa automática, unidade   ainda precisa ser escolhida.\n- **manager** — acesso a UMA unidade específica, nunca à empresa inteira   (reforçado por trigger no banco).\n- **attendant** — empresa inteira ou unidade(s) específica(s); automático se   vinculado a exatamente uma unidade.\n\nRequests de exemplo de erro (401/403/404/409/422/400) estão incluídos em cada pasta para documentar o comportamento completo da API, não só o caminho feliz.",
+    "description": "API do Ótica Lab — sistema multi-tenant para clínicas/óticas com múltiplas empresas e unidades.\n\n## Como usar esta coleção\n\n1. Ajuste `base_url` (variável de coleção) para onde sua API está rodando.\n2. Preencha `login_email`/`login_password` com um usuário `super_admin`    existente (o primeiro é inserido manualmente no banco — veja    `db/migrations/README.md`).\n3. Rode **Auth > Login** — o token é salvo automaticamente em `access_token`    e reutilizado por todas as pastas seguintes (autenticação em nível de    coleção, tipo Bearer).\n4. As pastas seguem a ordem de dependência do domínio: Users -> Companies    (empresa -> unidade -> conceder acesso) -> Customers -> Appointments.    Cada request de criação salva o ID retornado numa variável de coleção    (`company_id`, `unit_id`, `customer_id`, `appointment_id`, etc.),    reutilizada automaticamente pelas próximas requisições — rode as pastas    em ordem, de cima para baixo, para popular a cadeia toda.\n5. Todo DELETE/revoke fica na última pasta, **Cleanup** — rode-a por    último. Não fica espalhado nas pastas de criação porque o runner do    Postman executa cada pasta inteira antes de passar pra próxima, e    Customers/Appointments ainda precisam da empresa/unidade existirem.\n\n## Hierarquia\n\n```\ncompany (empresa)\n  -> company_unit (unidade/filial)\n        -> appointment (agendamento — empresa/unidade próprias, cliente opcional)\n        -> customer (cliente — cadastro direto OU criado ao completar um agendamento)\n```\n\nUm agendamento (`appointments`) começa como LEAD: nome e telefone de quem está\nmarcando ficam guardados nele mesmo, sem nenhuma linha em `customers`.\nSó quando o agendamento é marcado `attended` (compareceu) é que a API cria (ou\nreaproveita, se já existir pelo nome na empresa) o cliente de fato.\n`cancelled`/`no_show` nunca geram cliente.\n\n## Papéis (roles)\n\n- **super_admin** — acesso global; deve informar `company_id`/`company_unit_id`   explicitamente ao cadastrar cliente.\n- **admin** — acesso a toda a empresa vinculada; empresa automática, unidade   ainda precisa ser escolhida.\n- **manager** — acesso a UMA unidade específica, nunca à empresa inteira   (reforçado por trigger no banco).\n- **attendant** — empresa inteira ou unidade(s) específica(s); automático se   vinculado a exatamente uma unidade.\n\nRequests de exemplo de erro (401/403/404/409/422/400) estão incluídos em cada pasta para documentar o comportamento completo da API, não só o caminho feliz.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "auth": {
@@ -2254,7 +2254,7 @@
     },
     {
       "name": "Customers",
-      "description": "Clientes atendidos (pacientes), cadastrados numa empresa/unidade específicas. `company_id`/`company_unit_id` seguem a regra de auto-preenchimento por papel do usuário — veja a descrição da coleção e de `/docs`. Esta pasta demonstra o cadastro DIRETO de cliente; a pasta Appointments demonstra a outra forma de um cliente passar a existir — criado automaticamente a partir de um agendamento marcado `completed`.",
+      "description": "Clientes atendidos (pacientes), cadastrados numa empresa/unidade específicas. `company_id`/`company_unit_id` seguem a regra de auto-preenchimento por papel do usuário — veja a descrição da coleção e de `/docs`. Esta pasta demonstra o cadastro DIRETO de cliente; a pasta Appointments demonstra a outra forma de um cliente passar a existir — criado automaticamente a partir de um agendamento marcado `attended`.",
       "item": [
         {
           "name": "Create customer (super_admin, IDs explícitos)",
@@ -2865,7 +2865,7 @@
     },
     {
       "name": "Appointments",
-      "description": "Agendamentos, escopados à empresa/unidade própria (não mais herdada de um cliente). Começam como LEAD — nome/telefone guardados no próprio agendamento — e só viram cliente de fato (`customers`) quando marcados `completed`. O mesmo lead não pode ter dois agendamentos no mesmo horário exato (índice único parcial, migration `0005`). Toda edição bem-sucedida grava uma linha imutável em `appointment_history`, na mesma transação do UPDATE (função RPC no Postgres).",
+      "description": "Agendamentos, escopados à empresa/unidade própria (não mais herdada de um cliente). Começam como LEAD — nome/telefone guardados no próprio agendamento — e só viram cliente de fato (`customers`) quando marcados `attended`. O mesmo lead não pode ter dois agendamentos no mesmo horário exato (índice único parcial, migration `0005`). Toda edição bem-sucedida grava uma linha imutável em `appointment_history`, na mesma transação do UPDATE (função RPC no Postgres).",
       "item": [
         {
           "name": "Create appointment (lead)",
@@ -2887,7 +2887,7 @@
                 ""
               ]
             },
-            "description": "Cria um agendamento para um LEAD — não recebe (nem aceita) `customer_id`. Quem está marcando ainda não é um cliente: nome e telefone ficam guardados direto no agendamento (`lead_full_name`/`lead_phone`), sem nenhuma linha criada em `customers`. O lead só vira cliente de verdade quando o agendamento é marcado `completed` — veja 'Update appointment (completed — promove lead a cliente)' mais abaixo. `company_id`/`company_unit_id` seguem a mesma regra de auto-preenchimento de `POST /customers` (aqui informados porque o usuário logado é `super_admin`). Status inicial sempre `scheduled`.",
+            "description": "Cria um agendamento para um LEAD — não recebe (nem aceita) `customer_id`. Quem está marcando ainda não é um cliente: nome e telefone ficam guardados direto no agendamento (`lead_full_name`/`lead_phone`), sem nenhuma linha criada em `customers`. O lead só vira cliente de verdade quando o agendamento é marcado `attended` — veja 'Update appointment (attended — promove lead a cliente)' mais abaixo. `company_id`/`company_unit_id` seguem a mesma regra de auto-preenchimento de `POST /customers` (aqui informados porque o usuário logado é `super_admin`). Status inicial sempre `scheduled`.",
             "body": {
               "mode": "raw",
               "raw": "{\n    \"lead_full_name\": \"Fernanda Costa\",\n    \"lead_phone\": \"11988887777\",\n    \"scheduled_at\": \"2026-06-15T14:30:00Z\",\n    \"notes\": \"Primeira consulta\",\n    \"company_id\": \"{{company_id}}\",\n    \"company_unit_id\": \"{{unit_id}}\"\n}",
@@ -2919,7 +2919,7 @@
                     ""
                   ]
                 },
-                "description": "Cria um agendamento para um LEAD — não recebe (nem aceita) `customer_id`. Quem está marcando ainda não é um cliente: nome e telefone ficam guardados direto no agendamento (`lead_full_name`/`lead_phone`), sem nenhuma linha criada em `customers`. O lead só vira cliente de verdade quando o agendamento é marcado `completed` — veja 'Update appointment (completed — promove lead a cliente)' mais abaixo. `company_id`/`company_unit_id` seguem a mesma regra de auto-preenchimento de `POST /customers` (aqui informados porque o usuário logado é `super_admin`). Status inicial sempre `scheduled`.",
+                "description": "Cria um agendamento para um LEAD — não recebe (nem aceita) `customer_id`. Quem está marcando ainda não é um cliente: nome e telefone ficam guardados direto no agendamento (`lead_full_name`/`lead_phone`), sem nenhuma linha criada em `customers`. O lead só vira cliente de verdade quando o agendamento é marcado `attended` — veja 'Update appointment (attended — promove lead a cliente)' mais abaixo. `company_id`/`company_unit_id` seguem a mesma regra de auto-preenchimento de `POST /customers` (aqui informados porque o usuário logado é `super_admin`). Status inicial sempre `scheduled`.",
                 "body": {
                   "mode": "raw",
                   "raw": "{\n    \"lead_full_name\": \"Fernanda Costa\",\n    \"lead_phone\": \"11988887777\",\n    \"scheduled_at\": \"2026-06-15T14:30:00Z\",\n    \"notes\": \"Primeira consulta\",\n    \"company_id\": \"{{company_id}}\",\n    \"company_unit_id\": \"{{unit_id}}\"\n}",
@@ -3375,7 +3375,7 @@
           ]
         },
         {
-          "name": "Update appointment (confirm)",
+          "name": "Update appointment (cancel)",
           "request": {
             "method": "PUT",
             "header": [
@@ -3394,10 +3394,10 @@
                 "{{appointment_id}}"
               ]
             },
-            "description": "Atualiza o status para `confirmed`. Grava automaticamente uma linha em `appointment_history` registrando `scheduled -> confirmed`. `confirmed` NÃO promove o lead — `customer_id` continua nulo.",
+            "description": "Atualiza o status para `cancelled`. Grava automaticamente uma linha em `appointment_history` registrando `scheduled -> cancelled`. `cancelled` NÃO promove o lead — `customer_id` continua nulo.",
             "body": {
               "mode": "raw",
-              "raw": "{\n    \"status\": \"confirmed\"\n}",
+              "raw": "{\n    \"status\": \"cancelled\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -3426,10 +3426,10 @@
                     "{{appointment_id}}"
                   ]
                 },
-                "description": "Atualiza o status para `confirmed`. Grava automaticamente uma linha em `appointment_history` registrando `scheduled -> confirmed`. `confirmed` NÃO promove o lead — `customer_id` continua nulo.",
+                "description": "Atualiza o status para `cancelled`. Grava automaticamente uma linha em `appointment_history` registrando `scheduled -> cancelled`. `cancelled` NÃO promove o lead — `customer_id` continua nulo.",
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n    \"status\": \"confirmed\"\n}",
+                  "raw": "{\n    \"status\": \"cancelled\"\n}",
                   "options": {
                     "raw": {
                       "language": "json"
@@ -3446,7 +3446,7 @@
                   "value": "application/json"
                 }
               ],
-              "body": "{\n    \"id\": \"f1a2c3d4-0000-4000-8000-000000000005\",\n    \"company_id\": \"c1a2c3d4-0000-4000-8000-000000000001\",\n    \"company_unit_id\": \"d1a2c3d4-0000-4000-8000-000000000002\",\n    \"lead_full_name\": \"Fernanda Costa\",\n    \"lead_phone\": \"11988887777\",\n    \"customer_id\": null,\n    \"created_by_user_id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n    \"updated_by_user_id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n    \"scheduled_at\": \"2026-06-15T14:30:00Z\",\n    \"status\": \"confirmed\",\n    \"notes\": \"Primeira consulta\",\n    \"created_at\": \"2026-01-01T12:00:00Z\",\n    \"updated_at\": \"2026-01-01T12:00:00Z\"\n}"
+              "body": "{\n    \"id\": \"f1a2c3d4-0000-4000-8000-000000000005\",\n    \"company_id\": \"c1a2c3d4-0000-4000-8000-000000000001\",\n    \"company_unit_id\": \"d1a2c3d4-0000-4000-8000-000000000002\",\n    \"lead_full_name\": \"Fernanda Costa\",\n    \"lead_phone\": \"11988887777\",\n    \"customer_id\": null,\n    \"created_by_user_id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n    \"updated_by_user_id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n    \"scheduled_at\": \"2026-06-15T14:30:00Z\",\n    \"status\": \"cancelled\",\n    \"notes\": \"Primeira consulta\",\n    \"created_at\": \"2026-01-01T12:00:00Z\",\n    \"updated_at\": \"2026-01-01T12:00:00Z\"\n}"
             }
           ],
           "event": [
@@ -3536,7 +3536,7 @@
                   "value": "application/json"
                 }
               ],
-              "body": "{\n    \"id\": \"f1a2c3d4-0000-4000-8000-000000000005\",\n    \"company_id\": \"c1a2c3d4-0000-4000-8000-000000000001\",\n    \"company_unit_id\": \"d1a2c3d4-0000-4000-8000-000000000002\",\n    \"lead_full_name\": \"Fernanda Costa\",\n    \"lead_phone\": \"11988887777\",\n    \"customer_id\": null,\n    \"created_by_user_id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n    \"updated_by_user_id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n    \"scheduled_at\": \"2026-06-20T10:00:00Z\",\n    \"status\": \"confirmed\",\n    \"notes\": \"Reagendado a pedido do cliente\",\n    \"created_at\": \"2026-01-01T12:00:00Z\",\n    \"updated_at\": \"2026-01-01T12:00:00Z\"\n}"
+              "body": "{\n    \"id\": \"f1a2c3d4-0000-4000-8000-000000000005\",\n    \"company_id\": \"c1a2c3d4-0000-4000-8000-000000000001\",\n    \"company_unit_id\": \"d1a2c3d4-0000-4000-8000-000000000002\",\n    \"lead_full_name\": \"Fernanda Costa\",\n    \"lead_phone\": \"11988887777\",\n    \"customer_id\": null,\n    \"created_by_user_id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n    \"updated_by_user_id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n    \"scheduled_at\": \"2026-06-20T10:00:00Z\",\n    \"status\": \"cancelled\",\n    \"notes\": \"Reagendado a pedido do cliente\",\n    \"created_at\": \"2026-01-01T12:00:00Z\",\n    \"updated_at\": \"2026-01-01T12:00:00Z\"\n}"
             }
           ],
           "event": [
@@ -3617,7 +3617,7 @@
                   "value": "application/json"
                 }
               ],
-              "body": "{\n    \"items\": [\n        {\n            \"id\": \"a1a2c3d4-0000-4000-8000-000000000006\",\n            \"appointment_id\": \"f1a2c3d4-0000-4000-8000-000000000005\",\n            \"changed_by_user_id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n            \"previous_scheduled_at\": \"2026-06-15T14:30:00Z\",\n            \"new_scheduled_at\": \"2026-06-15T14:30:00Z\",\n            \"previous_status\": \"scheduled\",\n            \"new_status\": \"confirmed\",\n            \"previous_notes\": \"Primeira consulta\",\n            \"new_notes\": \"Primeira consulta\",\n            \"changed_at\": \"2026-01-02T09:00:00Z\"\n        },\n        {\n            \"id\": \"a1a2c3d4-0000-4000-8000-000000000007\",\n            \"appointment_id\": \"f1a2c3d4-0000-4000-8000-000000000005\",\n            \"changed_by_user_id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n            \"previous_scheduled_at\": \"2026-06-15T14:30:00Z\",\n            \"new_scheduled_at\": \"2026-06-20T10:00:00Z\",\n            \"previous_status\": \"confirmed\",\n            \"new_status\": \"confirmed\",\n            \"previous_notes\": \"Primeira consulta\",\n            \"new_notes\": \"Reagendado a pedido do cliente\",\n            \"changed_at\": \"2026-01-02T09:05:00Z\"\n        }\n    ],\n    \"page\": 1,\n    \"page_size\": 20,\n    \"total\": 2\n}"
+              "body": "{\n    \"items\": [\n        {\n            \"id\": \"a1a2c3d4-0000-4000-8000-000000000006\",\n            \"appointment_id\": \"f1a2c3d4-0000-4000-8000-000000000005\",\n            \"changed_by_user_id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n            \"previous_scheduled_at\": \"2026-06-15T14:30:00Z\",\n            \"new_scheduled_at\": \"2026-06-15T14:30:00Z\",\n            \"previous_status\": \"scheduled\",\n            \"new_status\": \"cancelled\",\n            \"previous_notes\": \"Primeira consulta\",\n            \"new_notes\": \"Primeira consulta\",\n            \"changed_at\": \"2026-01-02T09:00:00Z\"\n        },\n        {\n            \"id\": \"a1a2c3d4-0000-4000-8000-000000000007\",\n            \"appointment_id\": \"f1a2c3d4-0000-4000-8000-000000000005\",\n            \"changed_by_user_id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n            \"previous_scheduled_at\": \"2026-06-15T14:30:00Z\",\n            \"new_scheduled_at\": \"2026-06-20T10:00:00Z\",\n            \"previous_status\": \"cancelled\",\n            \"new_status\": \"cancelled\",\n            \"previous_notes\": \"Primeira consulta\",\n            \"new_notes\": \"Reagendado a pedido do cliente\",\n            \"changed_at\": \"2026-01-02T09:05:00Z\"\n        }\n    ],\n    \"page\": 1,\n    \"page_size\": 20,\n    \"total\": 2\n}"
             }
           ],
           "event": [
@@ -3633,7 +3633,7 @@
           ]
         },
         {
-          "name": "Update appointment (completed — promove lead a cliente)",
+          "name": "Update appointment (attended — promove lead a cliente)",
           "request": {
             "method": "PUT",
             "header": [
@@ -3652,10 +3652,10 @@
                 "{{appointment_id}}"
               ]
             },
-            "description": "Marcar `status: \"completed\"` (compareceu) pela primeira vez promove o lead a cliente: a API procura um cliente já existente com o mesmo nome nesta empresa (reaproveita se achar) ou cria um novo em `customers`, e liga `customer_id` ao agendamento — sem chamada extra do lado do cliente da API. `cancelled`/`no_show` nunca promovem.",
+            "description": "Marcar `status: \"attended\"` (compareceu) pela primeira vez promove o lead a cliente: a API procura um cliente já existente com o mesmo nome + nascimento nesta empresa (reaproveita se achar) ou cria um novo em `customers`, e liga `customer_id` ao agendamento — sem chamada extra do lado do cliente da API. `cancelled`/`no_show` nunca promovem.",
             "body": {
               "mode": "raw",
-              "raw": "{\n    \"status\": \"completed\"\n}",
+              "raw": "{\n    \"status\": \"attended\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -3684,10 +3684,10 @@
                     "{{appointment_id}}"
                   ]
                 },
-                "description": "Marcar `status: \"completed\"` (compareceu) pela primeira vez promove o lead a cliente: a API procura um cliente já existente com o mesmo nome nesta empresa (reaproveita se achar) ou cria um novo em `customers`, e liga `customer_id` ao agendamento — sem chamada extra do lado do cliente da API. `cancelled`/`no_show` nunca promovem.",
+                "description": "Marcar `status: \"attended\"` (compareceu) pela primeira vez promove o lead a cliente: a API procura um cliente já existente com o mesmo nome + nascimento nesta empresa (reaproveita se achar) ou cria um novo em `customers`, e liga `customer_id` ao agendamento — sem chamada extra do lado do cliente da API. `cancelled`/`no_show` nunca promovem.",
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n    \"status\": \"completed\"\n}",
+                  "raw": "{\n    \"status\": \"attended\"\n}",
                   "options": {
                     "raw": {
                       "language": "json"
@@ -3704,7 +3704,7 @@
                   "value": "application/json"
                 }
               ],
-              "body": "{\n    \"id\": \"f1a2c3d4-0000-4000-8000-000000000005\",\n    \"company_id\": \"c1a2c3d4-0000-4000-8000-000000000001\",\n    \"company_unit_id\": \"d1a2c3d4-0000-4000-8000-000000000002\",\n    \"lead_full_name\": \"Fernanda Costa\",\n    \"lead_phone\": \"11988887777\",\n    \"customer_id\": \"e1a2c3d4-0000-4000-8000-000000000004\",\n    \"created_by_user_id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n    \"updated_by_user_id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n    \"scheduled_at\": \"2026-06-20T10:00:00Z\",\n    \"status\": \"completed\",\n    \"notes\": \"Reagendado a pedido do cliente\",\n    \"created_at\": \"2026-01-01T12:00:00Z\",\n    \"updated_at\": \"2026-01-01T12:00:00Z\"\n}"
+              "body": "{\n    \"id\": \"f1a2c3d4-0000-4000-8000-000000000005\",\n    \"company_id\": \"c1a2c3d4-0000-4000-8000-000000000001\",\n    \"company_unit_id\": \"d1a2c3d4-0000-4000-8000-000000000002\",\n    \"lead_full_name\": \"Fernanda Costa\",\n    \"lead_phone\": \"11988887777\",\n    \"customer_id\": \"e1a2c3d4-0000-4000-8000-000000000004\",\n    \"created_by_user_id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n    \"updated_by_user_id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n    \"scheduled_at\": \"2026-06-20T10:00:00Z\",\n    \"status\": \"attended\",\n    \"notes\": \"Reagendado a pedido do cliente\",\n    \"created_at\": \"2026-01-01T12:00:00Z\",\n    \"updated_at\": \"2026-01-01T12:00:00Z\"\n}"
             }
           ],
           "event": [
@@ -3833,7 +3833,7 @@
                 "{{promoted_customer_id}}"
               ]
             },
-            "description": "Remove o cliente criado automaticamente ao marcar o agendamento de demonstração como `completed`."
+            "description": "Remove o cliente criado automaticamente ao marcar o agendamento de demonstração como `attended`."
           },
           "response": [],
           "event": [

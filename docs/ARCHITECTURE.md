@@ -23,13 +23,13 @@ Documentação completa da implementação: stack, camadas, modelo de domínio, 
 
 ## Visão geral
 
-Sistema multi-tenant para clínicas/óticas com múltiplas empresas (`companies`) e unidades (`company_units`). Um agendamento (`appointments`) é criado direto numa unidade, com os dados de quem marcou (nome, telefone) guardados nele mesmo — ainda como **lead**, sem linha em `customers`. Só quando o agendamento é marcado `completed` (compareceu) é que o lead vira de fato um cliente (veja [De lead a cliente](#de-lead-a-cliente)).
+Sistema multi-tenant para clínicas/óticas com múltiplas empresas (`companies`) e unidades (`company_units`). Um agendamento (`appointments`) é criado direto numa unidade, com os dados de quem marcou (nome, telefone) guardados nele mesmo — ainda como **lead**, sem linha em `customers`. Só quando o agendamento é marcado `attended` (compareceu) é que o lead vira de fato um cliente (veja [De lead a cliente](#de-lead-a-cliente)).
 
 ```
 company (empresa)
   └── company_unit (unidade/filial)
         ├── appointment (agendamento — empresa/unidade próprias, cliente opcional)
-        └── customer (cliente, só passa a existir a partir de um appointment completed)
+        └── customer (cliente, só passa a existir a partir de um appointment attended)
 ```
 
 O acesso de um usuário a uma empresa/unidade é controlado por vínculos em `company_users`, exceto para `super_admin`, que tem acesso global sem precisar de vínculo explícito.
@@ -165,7 +165,7 @@ erDiagram
         uuid company_unit_id FK
         varchar lead_full_name "nome de quem marcou"
         varchar lead_phone
-        uuid customer_id FK "nullable — só após completed"
+        uuid customer_id FK "nullable — só após attended"
         uuid created_by_user_id FK
         uuid updated_by_user_id FK
         timestamptz scheduled_at
@@ -267,6 +267,8 @@ Sem Alembic — [`db/migrations/0001_initial_schema.sql`](../db/migrations/0001_
 
 [`0006_remove_date_of_birth.sql`](../db/migrations/0006_remove_date_of_birth.sql) — data de nascimento deixa de ser rastreada, tanto em `customers` quanto no lead de `appointments`; a identidade do cliente passa a ser só o nome completo por empresa. **Destrutiva**: qualquer data de nascimento já gravada é perdida ao rodar. Ajusta `uq_customers_company_id_full_name_date_of_birth` → `uq_customers_company_id_full_name` e `uq_appointments_lead_scheduled_at` para não referenciar mais a coluna removida.
 
+[`0007_simplify_appointment_status.sql`](../db/migrations/0007_simplify_appointment_status.sql) — remove `confirmed` do enum `appointment_status` (agendamentos nesse status voltam para `scheduled`) e renomeia `completed` para `attended`. Como Postgres não suporta remover valor de enum diretamente, o tipo é recriado do zero (`ALTER TYPE ... RENAME TO ..._old` + `CREATE TYPE` + `ALTER COLUMN ... TYPE` nas três colunas afetadas); a function `update_appointment_with_history` precisa ser recriada no meio do processo porque seu parâmetro referencia o tipo do enum.
+
 ### Rate limiting de login
 
 `POST /auth/login` bloqueia (`429`) após 5 tentativas com falha para o mesmo e-mail em 15 minutos. O contador vive na tabela `login_attempts` (Postgres), não em memória do processo — necessário para a API escalar horizontalmente sem estado compartilhado entre instâncias. Cada tentativa (sucesso ou falha) também é registrada ali, servindo de trilha de auditoria básica de login.
@@ -283,9 +285,9 @@ chamada via `client.rpc(...)` em [`app/appointments/repository.py`](../app/appoi
 
 ### De lead a cliente
 
-`POST /appointments` não recebe `customer_id` — recebe `lead_full_name`/`lead_phone`, guardados direto no agendamento. Enquanto o status não é `completed`, não existe nenhuma linha em `customers`: é só um lead. Data de nascimento não é (mais) rastreada em nenhum dos dois — removida por completo na migration [`0006`](../db/migrations/0006_remove_date_of_birth.sql); a identidade do cliente passou a ser só o nome completo, por empresa.
+`POST /appointments` não recebe `customer_id` — recebe `lead_full_name`/`lead_phone`, guardados direto no agendamento. Enquanto o status não é `attended`, não existe nenhuma linha em `customers`: é só um lead. Data de nascimento não é (mais) rastreada em nenhum dos dois — removida por completo na migration [`0006`](../db/migrations/0006_remove_date_of_birth.sql); a identidade do cliente passou a ser só o nome completo, por empresa.
 
-Quando `PUT /appointments/{id}` marca `status: "completed"` pela primeira vez, `AppointmentService._promote_lead_to_customer` procura um cliente já existente com o mesmo nome nesta empresa (`CustomerRepository.get_by_identity`) — se achar, reaproveita; senão cria um novo — e passa o `customer_id` resultante para `update_appointment_with_history` (parâmetro `p_customer_id`, adicionado na migration [`0004_appointment_leads.sql`](../db/migrations/0004_appointment_leads.sql)), que faz `COALESCE(p_customer_id, customer_id)` no mesmo `UPDATE` do status/histórico. `cancelled`/`no_show` nunca promovem o lead.
+Quando `PUT /appointments/{id}` marca `status: "attended"` pela primeira vez, `AppointmentService._promote_lead_to_customer` procura um cliente já existente com o mesmo nome nesta empresa (`CustomerRepository.get_by_identity`) — se achar, reaproveita; senão cria um novo — e passa o `customer_id` resultante para `update_appointment_with_history` (parâmetro `p_customer_id`, adicionado na migration [`0004_appointment_leads.sql`](../db/migrations/0004_appointment_leads.sql)), que faz `COALESCE(p_customer_id, customer_id)` no mesmo `UPDATE` do status/histórico. `cancelled`/`no_show` nunca promovem o lead.
 
 A busca do cliente existente e a criação/atualização do agendamento são duas chamadas HTTP separadas (limitação do PostgREST — só a segunda parte, `UPDATE` + histórico, é atômica via RPC). Isso deixa uma janela de corrida (TOCTOU): duas completions concorrentes do mesmo lead (mesmo nome, mesma empresa) podem passar as duas pelo `SELECT` sem achar nada e colidir no `INSERT`. `AppointmentService._promote_lead_to_customer` trata isso — se o `create` estourar `CustomerAlreadyExistsError`, repete o `get_by_identity` uma vez e reaproveita a linha que a chamada concorrente vencedora acabou de commitar, em vez de propagar o erro. Falha de forma segura mesmo sem esse retry: o agendamento só é atualizado depois da promoção resolver, então nunca fica em estado parcial.
 

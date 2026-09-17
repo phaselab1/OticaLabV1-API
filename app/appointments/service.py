@@ -79,7 +79,7 @@ class AppointmentService:
     async def _promote_lead_to_customer(self, appointment: Appointment, current_user: User) -> str:
         """Vira o lead do agendamento em cliente de verdade (ou reaproveita um já existente
         com o mesmo nome nesta empresa), na primeira vez que o agendamento é marcado como
-        `completed`."""
+        `attended`."""
         existing_customer = await self.customer_repository.get_by_identity(
             company_id=appointment.company_id,
             full_name=appointment.lead_full_name,
@@ -119,7 +119,7 @@ class AppointmentService:
 
         customer_id = None
         if (
-            payload.get("status") == AppointmentStatus.COMPLETED.value
+            payload.get("status") == AppointmentStatus.ATTENDED.value
             and existing.customer_id is None
         ):
             customer_id = await self._promote_lead_to_customer(existing, current_user)

@@ -5,7 +5,11 @@ import pytest
 
 from app.appointments.exceptions import AppointmentNotFoundError
 from app.appointments.model import Appointment, AppointmentHistoryEntry, AppointmentStatus
-from app.appointments.schema import AppointmentCreate, AppointmentUpdate
+from app.appointments.schema import (
+    AppointmentCreate,
+    AppointmentReschedule,
+    AppointmentUpdate,
+)
 from app.appointments.service import AppointmentHistoryService, AppointmentService
 from app.companies.model import CompanyUserLink
 from app.companies.service import CompanyUserService
@@ -429,3 +433,72 @@ async def test_history_service_unknown_appointment_raises_not_found(
 
     with pytest.raises(AppointmentNotFoundError):
         await history_service.get_by_appointment("missing", current_user, page=1, page_size=20)
+
+
+async def test_update_attended_appointment_forbidden_for_attendant(
+    service: AppointmentService, current_user: User
+) -> None:
+    created = await service.create(_lead_create(), current_user)
+    await service.update(
+        created.id, AppointmentUpdate(status=AppointmentStatus.ATTENDED), current_user
+    )
+
+    with pytest.raises(ForbiddenError) as exc_info:
+        await service.update(
+            created.id, AppointmentUpdate(status=AppointmentStatus.CANCELLED), current_user
+        )
+    assert "comparecido" in str(exc_info.value)
+
+
+async def test_reschedule_attended_appointment_forbidden_for_attendant(
+    service: AppointmentService, current_user: User
+) -> None:
+    created = await service.create(_lead_create(), current_user)
+    await service.update(
+        created.id, AppointmentUpdate(status=AppointmentStatus.ATTENDED), current_user
+    )
+
+    with pytest.raises(ForbiddenError) as exc_info:
+        await service.reschedule(
+            created.id,
+            AppointmentReschedule(scheduled_at=datetime.now(UTC)),
+            current_user,
+        )
+    assert "comparecido" in str(exc_info.value)
+
+
+async def test_update_attended_appointment_allowed_for_admin(
+    appointment_repository: FakeAppointmentRepository,
+    customer_repository: FakeCustomerRepository,
+    current_user: User,
+) -> None:
+    admin_user = User(
+        id="admin-1",
+        full_name="Admin",
+        email="admin@example.com",
+        password_hash="hash",
+        role=UserRole.ADMIN,
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
+        deleted_at=None,
+    )
+    company_user_service = _company_user_service(
+        [
+            _link(current_user.id, COMPANY_ID, UNIT_ID),
+            _link(admin_user.id, COMPANY_ID, UNIT_ID),
+        ]
+    )
+    service = AppointmentService(
+        appointment_repository,  # type: ignore[arg-type]
+        customer_repository,  # type: ignore[arg-type]
+        company_user_service,
+    )
+    created = await service.create(_lead_create(), current_user)
+    await service.update(
+        created.id, AppointmentUpdate(status=AppointmentStatus.ATTENDED), current_user
+    )
+
+    updated = await service.update(
+        created.id, AppointmentUpdate(status=AppointmentStatus.CANCELLED), admin_user
+    )
+    assert updated.status == AppointmentStatus.CANCELLED

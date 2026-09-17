@@ -115,6 +115,14 @@ class AppointmentService:
     ) -> Appointment:
         existing = await self._get_with_access_check(appointment_id, current_user)
 
+        if (
+            existing.status == AppointmentStatus.ATTENDED
+            and current_user.role == UserRole.ATTENDANT
+        ):
+            raise ForbiddenError(
+                "Agendamento já marcado como comparecido não pode ser alterado por atendente."
+            )
+
         payload = data.model_dump(mode="json", exclude_unset=True)
 
         customer_id = None
@@ -140,7 +148,15 @@ class AppointmentService:
     async def reschedule(
         self, appointment_id: str, data: AppointmentReschedule, current_user: User
     ) -> Appointment:
-        await self._get_with_access_check(appointment_id, current_user)
+        existing = await self._get_with_access_check(appointment_id, current_user)
+
+        if (
+            existing.status == AppointmentStatus.ATTENDED
+            and current_user.role == UserRole.ATTENDANT
+        ):
+            raise ForbiddenError(
+                "Agendamento já marcado como comparecido não pode ser reagendado por atendente."
+            )
 
         payload = data.model_dump(mode="json")
         appointment = await self.repository.update_with_history(

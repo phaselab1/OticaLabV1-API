@@ -1,5 +1,16 @@
+import logging
+
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
+from postgrest.exceptions import APIError
+
+logger = logging.getLogger("app")
+
+# Postgres SQLSTATE for "invalid input syntax" — hit when a path param that's
+# supposed to be a UUID (customer_id, appointment_id, ...) isn't one. Every
+# repository passes IDs straight through to PostgREST without pre-validating
+# the format, so this is reachable from any `/{id}` route.
+INVALID_TEXT_REPRESENTATION = "22P02"
 
 
 class NotFoundError(Exception):
@@ -26,3 +37,13 @@ def register_exception_handlers(app: FastAPI) -> None:
     @app.exception_handler(ForbiddenError)
     async def forbidden_handler(request: Request, exc: ForbiddenError) -> JSONResponse:
         return JSONResponse(status_code=403, content={"detail": str(exc)})
+
+    @app.exception_handler(APIError)
+    async def postgrest_api_error_handler(request: Request, exc: APIError) -> JSONResponse:
+        if exc.code == INVALID_TEXT_REPRESENTATION:
+            return JSONResponse(status_code=404, content={"detail": "Resource not found"})
+
+        logger.error(
+            "Unhandled PostgREST error on %s %s", request.method, request.url.path, exc_info=exc
+        )
+        return JSONResponse(status_code=500, content={"detail": "Internal Server Error"})

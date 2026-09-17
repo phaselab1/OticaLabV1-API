@@ -158,3 +158,22 @@ def test_full_crud_flow(client: TestClient) -> None:
 
     after_delete = client.get(f"/customers/{customer_id}")
     assert after_delete.status_code == 404
+
+
+def test_attendant_cannot_delete_customer(client: TestClient) -> None:
+    created = client.post(
+        "/customers/",
+        json={
+            "full_name": "Carla Lima",
+            "company_id": "company-a",
+            "company_unit_id": "unit-a1",
+        },
+    ).json()
+
+    app.dependency_overrides[get_current_user] = lambda: replace(
+        _fake_user(), id="user-2", role=UserRole.ATTENDANT
+    )
+
+    response = client.delete(f"/customers/{created['id']}")
+
+    assert response.status_code == 403

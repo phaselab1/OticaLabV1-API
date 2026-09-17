@@ -6,7 +6,9 @@ PHONE_PATTERN = r"^\d{10,11}$"
 
 
 class CustomerCreate(BaseModel):
-    full_name: str = Field(description="Nome completo do cliente.", examples=["Bruno Souza"])
+    full_name: str = Field(
+        max_length=255, description="Nome completo do cliente.", examples=["Bruno Souza"]
+    )
     date_of_birth: date = Field(description="Data de nascimento.", examples=["1990-05-20"])
     phone: str | None = Field(
         default=None,
@@ -33,7 +35,9 @@ class CustomerCreate(BaseModel):
 
 
 class CustomerUpdate(BaseModel):
-    full_name: str | None = Field(default=None, description="Novo nome, se for alterar.")
+    full_name: str | None = Field(
+        default=None, max_length=255, description="Novo nome, se for alterar."
+    )
     date_of_birth: date | None = Field(
         default=None, description="Nova data de nascimento, se for alterar."
     )

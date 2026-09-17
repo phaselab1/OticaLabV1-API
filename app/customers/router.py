@@ -54,18 +54,27 @@ async def create_customer(
 )
 async def list_customers(
     service: CustomerServiceDep,
+    current_user: CurrentUser,
     page: Annotated[int, Query(ge=1, description="Número da página, começando em 1.")] = 1,
     page_size: Annotated[int, Query(ge=1, le=100, description="Itens por página (máx. 100).")] = 20,
     company_id: Annotated[str | None, Query(description="Filtra por UUID da empresa.")] = None,
     company_unit_id: Annotated[str | None, Query(description="Filtra por UUID da unidade.")] = None,
 ) -> Page[Customer]:
     """
-    Lista clientes ativos, paginado. Filtros opcionais por empresa e/ou
-    unidade (não há escopo automático por usuário nesta listagem — use
-    os filtros para restringir).
+    Lista clientes ativos, paginado.
+
+    `super_admin` pode filtrar livremente por empresa/unidade (ou ver
+    tudo, sem filtro). Qualquer outro role é restrito ao escopo do seu
+    próprio vínculo de acesso — os filtros, se informados, precisam estar
+    dentro desse escopo; se omitidos, são preenchidos automaticamente
+    quando não houver ambiguidade (mesma regra de `POST /customers`).
     """
     return await service.get_all(
-        page=page, page_size=page_size, company_id=company_id, company_unit_id=company_unit_id
+        current_user,
+        page=page,
+        page_size=page_size,
+        company_id=company_id,
+        company_unit_id=company_unit_id,
     )
 
 
@@ -75,14 +84,17 @@ async def list_customers(
     summary="Buscar cliente por ID",
     responses={
         401: {"description": "Token ausente ou inválido."},
+        403: {"description": "Usuário não tem acesso à unidade deste cliente."},
         404: {"description": "Cliente não encontrado (ou soft-deletado)."},
     },
 )
 async def get_customer(
-    customer_id: Annotated[str, Path(description="UUID do cliente.")], service: CustomerServiceDep
+    customer_id: Annotated[str, Path(description="UUID do cliente.")],
+    service: CustomerServiceDep,
+    current_user: CurrentUser,
 ) -> Customer:
-    """Busca um cliente pelo UUID."""
-    return await service.get_by_id(customer_id)
+    """Busca um cliente pelo UUID. Requer acesso à unidade/empresa do cliente."""
+    return await service.get_by_id(customer_id, current_user)
 
 
 @router.put(
@@ -118,13 +130,14 @@ async def update_customer(
     summary="Excluir cliente",
     responses={
         401: {"description": "Token ausente ou inválido."},
+        403: {"description": "Usuário não tem acesso à unidade deste cliente."},
         404: {"description": "Cliente não encontrado (ou já soft-deletado)."},
     },
 )
 async def delete_customer(
     customer_id: Annotated[str, Path(description="UUID do cliente.")],
     service: CustomerServiceDep,
-    _current_user: CurrentUser,
+    current_user: CurrentUser,
 ) -> None:
     """Remove um cliente (soft delete). Agendamentos existentes não são afetados."""
-    await service.delete(customer_id)
+    await service.delete(customer_id, current_user)

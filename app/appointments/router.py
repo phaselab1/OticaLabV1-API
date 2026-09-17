@@ -52,6 +52,7 @@ async def create_appointment(
 )
 async def list_appointments(
     service: AppointmentServiceDep,
+    current_user: CurrentUser,
     page: Annotated[int, Query(ge=1, description="Número da página, começando em 1.")] = 1,
     page_size: Annotated[int, Query(ge=1, le=100, description="Itens por página (máx. 100).")] = 20,
     customer_id: Annotated[str | None, Query(description="Filtra por UUID do cliente.")] = None,
@@ -59,9 +60,17 @@ async def list_appointments(
         AppointmentStatus | None, Query(alias="status", description="Filtra por status.")
     ] = None,
 ) -> Page[Appointment]:
-    """Lista agendamentos ativos, ordenados por `scheduled_at` crescente, paginado."""
+    """
+    Lista agendamentos ativos, ordenados por `scheduled_at` crescente,
+    paginado. `super_admin` vê tudo; qualquer outro role é restrito ao
+    escopo do seu próprio vínculo de acesso.
+    """
     return await service.get_all(
-        page=page, page_size=page_size, customer_id=customer_id, status=status_filter
+        current_user,
+        page=page,
+        page_size=page_size,
+        customer_id=customer_id,
+        status=status_filter,
     )
 
 
@@ -71,14 +80,15 @@ async def list_appointments(
     summary="Buscar agendamento por ID",
     responses={
         401: {"description": "Token ausente ou inválido."},
+        403: {"description": "Usuário não tem acesso à unidade deste agendamento."},
         404: {"description": "Agendamento não encontrado (ou soft-deletado)."},
     },
 )
 async def get_appointment(
-    appointment_id: AppointmentIdPath, service: AppointmentServiceDep
+    appointment_id: AppointmentIdPath, service: AppointmentServiceDep, current_user: CurrentUser
 ) -> Appointment:
     """Busca um agendamento pelo UUID."""
-    return await service.get_by_id(appointment_id)
+    return await service.get_by_id(appointment_id, current_user)
 
 
 @router.get(
@@ -87,13 +97,14 @@ async def get_appointment(
     summary="Histórico de alterações do agendamento",
     responses={
         401: {"description": "Token ausente ou inválido."},
+        403: {"description": "Usuário não tem acesso à unidade deste agendamento."},
         404: {"description": "Agendamento não encontrado (ou soft-deletado)."},
     },
 )
 async def list_appointment_history(
     appointment_id: AppointmentIdPath,
     service: AppointmentHistoryServiceDep,
-    _current_user: CurrentUser,
+    current_user: CurrentUser,
     page: Annotated[int, Query(ge=1)] = 1,
     page_size: Annotated[int, Query(ge=1, le=100)] = 20,
 ) -> Page[AppointmentHistoryEntry]:
@@ -103,7 +114,9 @@ async def list_appointment_history(
     imutável (nem um superusuário do Postgres consegue alterá-la), cada
     linha é gravada automaticamente por `PUT /appointments/{id}`.
     """
-    return await service.get_by_appointment(appointment_id, page=page, page_size=page_size)
+    return await service.get_by_appointment(
+        appointment_id, current_user, page=page, page_size=page_size
+    )
 
 
 @router.put(
@@ -158,11 +171,12 @@ async def reschedule_appointment(
     summary="Excluir agendamento",
     responses={
         401: {"description": "Token ausente ou inválido."},
+        403: {"description": "Usuário não tem acesso à unidade deste agendamento."},
         404: {"description": "Agendamento não encontrado (ou já soft-deletado)."},
     },
 )
 async def delete_appointment(
-    appointment_id: AppointmentIdPath, service: AppointmentServiceDep, _current_user: CurrentUser
+    appointment_id: AppointmentIdPath, service: AppointmentServiceDep, current_user: CurrentUser
 ) -> None:
     """
     Remove um agendamento (soft delete) — reservado para remoção
@@ -170,4 +184,4 @@ async def delete_appointment(
     de verdade, prefira `PUT` com `status: "cancelled"`, que mantém o
     registro visível e gera histórico.
     """
-    await service.delete(appointment_id)
+    await service.delete(appointment_id, current_user)

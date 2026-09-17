@@ -115,13 +115,14 @@ app = FastAPI(
     contact={"name": "Ótica Lab", "email": "dev@oticalab.com"},
 )
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+if settings.cors_origins:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=settings.cors_origins,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
 register_exception_handlers(app)
 register_company_exception_handlers(app)

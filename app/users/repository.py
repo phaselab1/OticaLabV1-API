@@ -5,11 +5,12 @@ from postgrest.exceptions import APIError
 from postgrest.types import CountMethod
 from supabase import AsyncClient
 
-from app.shared.utils.postgrest import as_row
+from app.shared.utils.postgrest import as_row, as_rows
 from app.users.exceptions import UserAlreadyExistsError
 from app.users.model import User
 
 TABLE = "users"
+COMPANY_USERS_TABLE = "company_users"
 UNIQUE_VIOLATION = "23505"
 
 
@@ -38,6 +39,48 @@ class UserRepository:
         )
         users = [User.from_row(as_row(row)) for row in response.data]
         return users, response.count or 0
+
+    async def get_accessible_company_ids(self, user_id: str) -> list[str]:
+        response = (
+            await self.db.table(COMPANY_USERS_TABLE)
+            .select("company_id")
+            .eq("user_id", user_id)
+            .is_("deleted_at", "null")
+            .execute()
+        )
+        return list({row["company_id"] for row in as_rows(response.data)})
+
+    async def get_all_scoped(
+        self, *, page: int, page_size: int, company_ids: list[str], current_user_id: str
+    ) -> tuple[list[User], int]:
+        visible_user_ids = {current_user_id}
+        if company_ids:
+            links_response = (
+                await self.db.table(COMPANY_USERS_TABLE)
+                .select("user_id")
+                .in_("company_id", company_ids)
+                .is_("deleted_at", "null")
+                .execute()
+            )
+            visible_user_ids |= {row["user_id"] for row in as_rows(links_response.data)}
+
+        response = (
+            await self.db.table(TABLE)
+            .select("*", count=CountMethod.exact)
+            .is_("deleted_at", "null")
+            .in_("id", list(visible_user_ids))
+            .order("created_at", desc=True)
+            .offset((page - 1) * page_size)
+            .limit(page_size)
+            .execute()
+        )
+        users = [User.from_row(as_row(row)) for row in response.data]
+        return users, response.count or 0
+
+    async def shares_company_with(self, user_id: str, other_user_id: str) -> bool:
+        own_ids = set(await self.get_accessible_company_ids(user_id))
+        other_ids = set(await self.get_accessible_company_ids(other_user_id))
+        return bool(own_ids & other_ids)
 
     async def get_by_id(self, user_id: str) -> User | None:
         response = (

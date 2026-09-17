@@ -37,12 +37,17 @@ class AppointmentRepository:
         page: int,
         page_size: int,
         customer_id: str | None = None,
+        customer_ids: list[str] | None = None,
         status: AppointmentStatus | None = None,
     ) -> tuple[list[Appointment], int]:
         query = self.db.table(TABLE).select("*", count=CountMethod.exact).is_("deleted_at", "null")
 
         if customer_id is not None:
             query = query.eq("customer_id", customer_id)
+        elif customer_ids is not None:
+            if not customer_ids:
+                return [], 0
+            query = query.in_("customer_id", customer_ids)
         if status is not None:
             query = query.eq("status", status.value)
 

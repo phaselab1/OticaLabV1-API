@@ -52,26 +52,26 @@ class FakeCustomerService:
         self.rows[customer.id] = customer
         return customer
 
-    async def get_all(self, **_: object) -> Page[Customer]:
+    async def get_all(self, _current_user: User, **_: object) -> Page[Customer]:
         items = list(self.rows.values())
         return Page(items=items, page=1, page_size=20, total=len(items))
 
-    async def get_by_id(self, customer_id: str) -> Customer:
+    async def get_by_id(self, customer_id: str, _current_user: User) -> Customer:
         customer = self.rows.get(customer_id)
         if customer is None:
             raise CustomerNotFoundError(customer_id)
         return customer
 
     async def update(self, customer_id: str, data: CustomerUpdate, current_user: User) -> Customer:
-        customer = await self.get_by_id(customer_id)
+        customer = await self.get_by_id(customer_id, current_user)
         updated = replace(
             customer, updated_by_user_id=current_user.id, **data.model_dump(exclude_unset=True)
         )
         self.rows[customer_id] = updated
         return updated
 
-    async def delete(self, customer_id: str) -> None:
-        await self.get_by_id(customer_id)
+    async def delete(self, customer_id: str, current_user: User) -> None:
+        await self.get_by_id(customer_id, current_user)
         del self.rows[customer_id]
 
 

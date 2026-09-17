@@ -11,7 +11,9 @@ class AppointmentCreate(BaseModel):
         description="Data e hora do agendamento (ISO 8601, com fuso). Status inicial: `scheduled`.",
         examples=["2026-06-15T14:30:00Z"],
     )
-    notes: str | None = Field(default=None, description="Observações livres sobre o agendamento.")
+    notes: str | None = Field(
+        default=None, max_length=2000, description="Observações livres sobre o agendamento."
+    )
 
 
 class AppointmentUpdate(BaseModel):
@@ -23,6 +25,7 @@ class AppointmentUpdate(BaseModel):
     )
     notes: str | None = Field(
         default=None,
+        max_length=2000,
         description="Novas observações. `null` limpa o campo; omitir mantém o valor atual.",
     )
 
@@ -33,6 +36,7 @@ class AppointmentReschedule(BaseModel):
     )
     notes: str | None = Field(
         default=None,
+        max_length=2000,
         description="Observações ou motivo do reagendamento.",
     )
 

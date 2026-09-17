@@ -10,7 +10,15 @@ router = APIRouter(prefix="/auth", tags=["auth"])
     "/login",
     response_model=TokenResponse,
     summary="Login",
-    responses={401: {"description": "E-mail ou senha inválidos."}},
+    responses={
+        401: {"description": "E-mail ou senha inválidos."},
+        429: {
+            "description": (
+                "Mais de 5 tentativas com falha para este e-mail nos últimos 15 minutos. "
+                "Aguarde antes de tentar novamente."
+            )
+        },
+    },
 )
 async def login(data: LoginRequest, service: AuthServiceDep) -> TokenResponse:
     """
@@ -21,7 +29,10 @@ async def login(data: LoginRequest, service: AuthServiceDep) -> TokenResponse:
     `super_admin` inserido manualmente (veja `db/migrations/README.md`).
 
     O token expira em 60 minutos e deve ser enviado em
-    `Authorization: Bearer <token>` nas rotas protegidas.
+    `Authorization: Bearer <token>` nas rotas protegidas. Após 5 tentativas
+    com falha para o mesmo e-mail em 15 minutos, novas tentativas são
+    bloqueadas (`429`) até a janela expirar — o bloqueio é por e-mail,
+    persistido no banco, e vale para todas as instâncias da API.
     """
     token = await service.login(data.email, data.password)
     return TokenResponse(access_token=token)

@@ -21,26 +21,6 @@ def get_company_user_repository(db: SupabaseClient) -> CompanyUserRepository:
     return CompanyUserRepository(db)
 
 
-def get_company_service(
-    repository: Annotated[CompanyRepository, Depends(get_company_repository)],
-    company_user_repository: Annotated[CompanyUserRepository, Depends(get_company_user_repository)],
-) -> CompanyService:
-    return CompanyService(repository, company_user_repository)
-
-
-CompanyServiceDep = Annotated[CompanyService, Depends(get_company_service)]
-
-
-def get_company_unit_service(
-    repository: Annotated[CompanyUnitRepository, Depends(get_company_unit_repository)],
-    company_repository: Annotated[CompanyRepository, Depends(get_company_repository)],
-) -> CompanyUnitService:
-    return CompanyUnitService(repository, company_repository)
-
-
-CompanyUnitServiceDep = Annotated[CompanyUnitService, Depends(get_company_unit_service)]
-
-
 def get_company_user_service(
     repository: Annotated[CompanyUserRepository, Depends(get_company_user_repository)],
     company_repository: Annotated[CompanyRepository, Depends(get_company_repository)],
@@ -51,3 +31,24 @@ def get_company_user_service(
 
 
 CompanyUserServiceDep = Annotated[CompanyUserService, Depends(get_company_user_service)]
+
+
+def get_company_service(
+    repository: Annotated[CompanyRepository, Depends(get_company_repository)],
+    company_user_service: Annotated[CompanyUserService, Depends(get_company_user_service)],
+) -> CompanyService:
+    return CompanyService(repository, company_user_service)
+
+
+CompanyServiceDep = Annotated[CompanyService, Depends(get_company_service)]
+
+
+def get_company_unit_service(
+    repository: Annotated[CompanyUnitRepository, Depends(get_company_unit_repository)],
+    company_repository: Annotated[CompanyRepository, Depends(get_company_repository)],
+    company_user_service: Annotated[CompanyUserService, Depends(get_company_user_service)],
+) -> CompanyUnitService:
+    return CompanyUnitService(repository, company_repository, company_user_service)
+
+
+CompanyUnitServiceDep = Annotated[CompanyUnitService, Depends(get_company_unit_service)]

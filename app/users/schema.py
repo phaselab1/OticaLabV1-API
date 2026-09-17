@@ -6,13 +6,19 @@ from app.users.model import UserRole
 
 
 class UserCreate(BaseModel):
-    full_name: str = Field(description="Nome completo do usuário.", examples=["Ana Silva"])
+    full_name: str = Field(
+        max_length=255, description="Nome completo do usuário.", examples=["Ana Silva"]
+    )
     email: EmailStr = Field(
-        description="E-mail único — vira o login.", examples=["ana@oticalab.com"]
+        max_length=255, description="E-mail único — vira o login.", examples=["ana@oticalab.com"]
     )
     password: str = Field(
         min_length=8,
-        description="Senha em texto plano (mín. 8 caracteres) — nunca armazenada como tal.",
+        max_length=72,
+        description=(
+            "Senha em texto plano (8 a 72 caracteres — limite do bcrypt) — "
+            "nunca armazenada como tal."
+        ),
     )
     role: UserRole = Field(
         default=UserRole.ATTENDANT,
@@ -25,8 +31,12 @@ class UserCreate(BaseModel):
 
 
 class UserUpdate(BaseModel):
-    full_name: str | None = Field(default=None, description="Novo nome completo, se for alterar.")
-    email: EmailStr | None = Field(default=None, description="Novo e-mail, se for alterar.")
+    full_name: str | None = Field(
+        default=None, max_length=255, description="Novo nome completo, se for alterar."
+    )
+    email: EmailStr | None = Field(
+        default=None, max_length=255, description="Novo e-mail, se for alterar."
+    )
     role: UserRole | None = Field(default=None, description="Novo papel, se for alterar.")
 
 

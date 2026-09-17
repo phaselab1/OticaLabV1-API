@@ -206,9 +206,11 @@ async def test_create_appointment_for_unknown_customer_raises(
         )
 
 
-async def test_get_by_id_missing_raises_not_found(service: AppointmentService) -> None:
+async def test_get_by_id_missing_raises_not_found(
+    service: AppointmentService, current_user: User
+) -> None:
     with pytest.raises(AppointmentNotFoundError):
-        await service.get_by_id("missing")
+        await service.get_by_id("missing", current_user)
 
 
 async def test_create_appointment_without_unit_access_forbidden(
@@ -281,10 +283,10 @@ async def test_delete_then_get_by_id_raises_not_found(
         AppointmentCreate(customer_id="customer-1", scheduled_at=datetime.now(UTC)), current_user
     )
 
-    await service.delete(created.id)
+    await service.delete(created.id, current_user)
 
     with pytest.raises(AppointmentNotFoundError):
-        await service.get_by_id(created.id)
+        await service.get_by_id(created.id, current_user)
 
 
 async def test_history_service_returns_entries_for_existing_appointment(
@@ -299,24 +301,51 @@ async def test_history_service_returns_entries_for_existing_appointment(
         created.id, AppointmentUpdate(status=AppointmentStatus.CONFIRMED), current_user
     )
 
+    now = datetime.now(UTC)
+    link = CompanyUserLink(
+        id="link-1",
+        company_id=COMPANY_ID,
+        user_id=current_user.id,
+        unit_id=UNIT_ID,
+        granted_by_user_id="granter",
+        created_at=now,
+        updated_at=now,
+        deleted_at=None,
+    )
+    company_user_service = CompanyUserService(
+        FakeCompanyUserRepository([link]),  # type: ignore[arg-type]
+        None,  # type: ignore[arg-type]
+        None,  # type: ignore[arg-type]
+        None,  # type: ignore[arg-type]
+    )
     history_service = AppointmentHistoryService(
         FakeAppointmentHistoryRepository(appointment_repository),  # type: ignore[arg-type]
         appointment_repository,  # type: ignore[arg-type]
+        FakeCustomerRepository({"customer-1"}),  # type: ignore[arg-type]
+        company_user_service,
     )
 
-    page = await history_service.get_by_appointment(created.id, page=1, page_size=20)
+    page = await history_service.get_by_appointment(created.id, current_user, page=1, page_size=20)
 
     assert page.total == 1
     assert page.items[0].new_status == AppointmentStatus.CONFIRMED
 
 
 async def test_history_service_unknown_appointment_raises_not_found(
-    appointment_repository: FakeAppointmentRepository,
+    appointment_repository: FakeAppointmentRepository, current_user: User
 ) -> None:
+    company_user_service = CompanyUserService(
+        FakeCompanyUserRepository([]),  # type: ignore[arg-type]
+        None,  # type: ignore[arg-type]
+        None,  # type: ignore[arg-type]
+        None,  # type: ignore[arg-type]
+    )
     history_service = AppointmentHistoryService(
         FakeAppointmentHistoryRepository(appointment_repository),  # type: ignore[arg-type]
         appointment_repository,  # type: ignore[arg-type]
+        FakeCustomerRepository({"customer-1"}),  # type: ignore[arg-type]
+        company_user_service,
     )
 
     with pytest.raises(AppointmentNotFoundError):
-        await history_service.get_by_appointment("missing", page=1, page_size=20)
+        await history_service.get_by_appointment("missing", current_user, page=1, page_size=20)

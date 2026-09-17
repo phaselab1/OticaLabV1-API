@@ -8,6 +8,13 @@ from app.core.config import ACCESS_TOKEN_EXPIRE_MINUTES, ALGORITHM, get_settings
 
 settings = get_settings()
 
+# Hash of a fixed placeholder, checked when the user doesn't exist so the bcrypt
+# comparison always runs — otherwise login('unknown@x.com') returns instantly
+# and leaks whether an email is registered via response timing.
+DUMMY_PASSWORD_HASH = bcrypt.hashpw(b"dummy-password-for-timing-safety", bcrypt.gensalt()).decode(
+    "utf-8"
+)
+
 
 def hash_password(password: str) -> str:
     return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")

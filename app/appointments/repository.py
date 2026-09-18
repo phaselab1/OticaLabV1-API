@@ -132,14 +132,30 @@ class AppointmentRepository:
         return Appointment.from_row(as_row(response.data[0]))
 
     async def soft_delete(self, appointment_id: str) -> bool:
-        response = (
-            await self.db.table(TABLE)
-            .update({"deleted_at": datetime.now(UTC).isoformat()})
-            .eq("id", appointment_id)
-            .is_("deleted_at", "null")
-            .execute()
-        )
-        return len(response.data) > 0
+        now_iso = datetime.now(UTC).isoformat()
+        try:
+            response = (
+                await self.db.table(TABLE)
+                .update({"deleted_at": now_iso})
+                .eq("id", appointment_id)
+                .is_("deleted_at", "null")
+                .execute()
+            )
+            return len(response.data) > 0
+        except APIError as exc:
+            # Se a trigger do banco rejeitar porque o cliente/pai foi desativado antes
+            # ('customer ... is deactivated'), desvincula o customer_id (que aceita null)
+            # e aplica o soft-delete do agendamento
+            if "is deactivated" in str(exc):
+                response = (
+                    await self.db.table(TABLE)
+                    .update({"deleted_at": now_iso, "customer_id": None})
+                    .eq("id", appointment_id)
+                    .is_("deleted_at", "null")
+                    .execute()
+                )
+                return len(response.data) > 0
+            raise
 
 
 class AppointmentHistoryRepository:

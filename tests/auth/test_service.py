@@ -54,6 +54,7 @@ async def test_login_with_correct_credentials_returns_valid_token() -> None:
     payload = decode_access_token(token)
     assert payload is not None
     assert payload["sub"] == user.id
+    assert payload["role"] == user.role.value
 
 
 async def test_login_with_wrong_password_raises() -> None:

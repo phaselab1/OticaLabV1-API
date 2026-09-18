@@ -36,4 +36,4 @@ class AuthService:
         if user is None or not password_valid:
             raise InvalidCredentialsError
 
-        return create_access_token(subject=user.id)
+        return create_access_token(subject=user.id, role=user.role.value)

@@ -2,6 +2,9 @@ from fastapi import APIRouter
 
 from app.auth.dependencies import AuthServiceDep
 from app.auth.schema import LoginRequest, TokenResponse
+from app.users.dependencies import CurrentUser
+from app.users.model import User
+from app.users.schema import UserResponse
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -36,3 +39,14 @@ async def login(data: LoginRequest, service: AuthServiceDep) -> TokenResponse:
     """
     token = await service.login(data.email, data.password)
     return TokenResponse(access_token=token)
+
+
+@router.get(
+    "/me",
+    response_model=UserResponse,
+    summary="Perfil autenticado",
+    responses={401: {"description": "Token ausente, inválido ou expirado."}},
+)
+async def get_authenticated_profile(current_user: CurrentUser) -> User:
+    """Retorna o perfil validado pelo JWT enviado no header `Authorization`."""
+    return current_user

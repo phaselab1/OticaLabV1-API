@@ -66,6 +66,9 @@ class AppointmentService:
         if appointment is None:
             raise AppointmentNotFoundError(appointment_id)
 
+        if current_user.role == UserRole.SUPER_ADMIN:
+            return appointment
+
         if not await self.company_user_service.has_unit_access(
             current_user, appointment.company_id, appointment.company_unit_id
         ):

@@ -52,6 +52,9 @@ class CustomerService:
         if customer is None:
             raise CustomerNotFoundError(customer_id)
 
+        if current_user.role == UserRole.SUPER_ADMIN:
+            return customer
+
         if not await self.company_user_service.has_unit_access(
             current_user, customer.company_id, customer.company_unit_id
         ):

@@ -574,3 +574,19 @@ async def test_update_lead_info_forbidden_after_customer(
             admin_user,
         )
     assert "cliente" in str(exc_info.value)
+
+
+async def test_lead_full_name_normalized_to_title_case(
+    service: AppointmentService, current_user: User
+) -> None:
+    created = await service.create(
+        _lead_create(lead_full_name="GUILHERMY RODRIGUES DA SILVA"), current_user
+    )
+    assert created.lead_full_name == "Guilhermy Rodrigues da Silva"
+
+    updated = await service.update(
+        created.id,
+        AppointmentUpdate(lead_full_name="MARIA DE LOURDES DOS SANTOS"),
+        current_user,
+    )
+    assert updated.lead_full_name == "Maria de Lourdes dos Santos"

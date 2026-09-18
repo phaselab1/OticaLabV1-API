@@ -7,6 +7,7 @@ from app.core.exceptions import ForbiddenError
 from app.customers.exceptions import CustomerAlreadyExistsError
 from app.customers.repository import CustomerRepository
 from app.shared.pagination import Page
+from app.shared.utils.text import format_title_case
 from app.users.model import User, UserRole
 
 
@@ -27,6 +28,7 @@ class AppointmentService:
         )
 
         payload = data.model_dump(mode="json", exclude={"company_id", "company_unit_id"})
+        payload["lead_full_name"] = format_title_case(payload["lead_full_name"])
         payload["company_id"] = company_id
         payload["company_unit_id"] = company_unit_id
         payload["created_by_user_id"] = current_user.id
@@ -134,10 +136,15 @@ class AppointmentService:
             )
 
         if "lead_full_name" in payload or "lead_phone" in payload:
+            new_lead_name = (
+                format_title_case(payload["lead_full_name"])
+                if "lead_full_name" in payload and payload["lead_full_name"] is not None
+                else None
+            )
             await self.repository.update_lead_info(
                 appointment_id,
                 current_user.id,
-                lead_full_name=payload.get("lead_full_name"),
+                lead_full_name=new_lead_name,
                 lead_phone=payload.get("lead_phone"),
                 lead_phone_provided="lead_phone" in payload,
             )

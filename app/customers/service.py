@@ -5,6 +5,7 @@ from app.customers.model import Customer
 from app.customers.repository import CustomerRepository
 from app.customers.schema import CustomerCreate, CustomerUpdate
 from app.shared.pagination import Page
+from app.shared.utils.text import format_title_case
 from app.users.model import User, UserRole
 
 
@@ -21,6 +22,7 @@ class CustomerService:
         )
 
         payload = data.model_dump(mode="json", exclude={"company_id", "company_unit_id"})
+        payload["full_name"] = format_title_case(payload["full_name"])
         payload["company_id"] = company_id
         payload["company_unit_id"] = company_unit_id
         payload["created_by_user_id"] = current_user.id
@@ -63,6 +65,8 @@ class CustomerService:
         await self.get_by_id(customer_id, current_user)
 
         payload = data.model_dump(mode="json", exclude_unset=True)
+        if "full_name" in payload and payload["full_name"] is not None:
+            payload["full_name"] = format_title_case(payload["full_name"])
         payload["updated_by_user_id"] = current_user.id
         customer = await self.repository.update(customer_id, payload)
         if customer is None:

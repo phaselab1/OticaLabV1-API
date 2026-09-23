@@ -82,6 +82,7 @@ class AppointmentRepository:
         notes: str | None,
         notes_provided: bool,
         customer_id: str | None = None,
+        subject: str | None = None,
     ) -> Appointment | None:
         try:
             response = await self.db.rpc(
@@ -99,6 +100,12 @@ class AppointmentRepository:
         except APIError as exc:
             if exc.code == APPOINTMENT_NOT_FOUND:
                 return None
+            if exc.code == UNIQUE_VIOLATION:
+                scheduled = scheduled_at or "neste horário"
+                target_subject = subject or "Este paciente"
+                raise AppointmentAlreadyExistsError(
+                    target_subject, scheduled
+                ) from exc
             raise
         rows = as_rows(response.data)
         return Appointment.from_row(rows[0]) if rows else None

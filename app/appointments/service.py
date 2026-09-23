@@ -159,6 +159,7 @@ class AppointmentService:
         ):
             customer_id = await self._promote_lead_to_customer(existing, current_user)
 
+        subject = existing.lead_full_name or f"o cliente {existing.customer_id}"
         appointment = await self.repository.update_with_history(
             appointment_id,
             current_user.id,
@@ -167,6 +168,7 @@ class AppointmentService:
             notes=payload.get("notes"),
             notes_provided="notes" in payload,
             customer_id=customer_id,
+            subject=subject,
         )
         if appointment is None:
             raise AppointmentNotFoundError(appointment_id)
@@ -186,6 +188,7 @@ class AppointmentService:
             )
 
         payload = data.model_dump(mode="json")
+        subject = existing.lead_full_name or f"o cliente {existing.customer_id}"
         appointment = await self.repository.update_with_history(
             appointment_id,
             current_user.id,
@@ -193,6 +196,7 @@ class AppointmentService:
             status=None,
             notes=payload.get("notes"),
             notes_provided="notes" in payload,
+            subject=subject,
         )
         if appointment is None:
             raise AppointmentNotFoundError(appointment_id)

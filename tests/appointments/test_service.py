@@ -3,7 +3,10 @@ from typing import Any
 
 import pytest
 
-from app.appointments.exceptions import AppointmentNotFoundError
+from app.appointments.exceptions import (
+    AppointmentAlreadyExistsError,
+    AppointmentNotFoundError,
+)
 from app.appointments.model import Appointment, AppointmentHistoryEntry, AppointmentStatus
 from app.appointments.schema import (
     AppointmentCreate,
@@ -61,6 +64,7 @@ class FakeAppointmentRepository:
         notes: str | None,
         notes_provided: bool,
         customer_id: str | None = None,
+        subject: str | None = None,
     ) -> Appointment | None:
         row = self.rows.get(appointment_id)
         if row is None or row["deleted_at"] is not None:
@@ -590,3 +594,25 @@ async def test_lead_full_name_normalized_to_title_case(
         current_user,
     )
     assert updated.lead_full_name == "Maria de Lourdes dos Santos"
+
+
+async def test_reschedule_duplicate_slot_raises_conflict(
+    service: AppointmentService, current_user: User
+) -> None:
+    created = await service.create(_lead_create(), current_user)
+
+    # Simular repositório lançando AppointmentAlreadyExistsError em caso de colisão de slot
+    async def mock_update_conflict(*args: Any, **kwargs: Any) -> None:
+        raise AppointmentAlreadyExistsError(created.lead_full_name, "2026-09-23T10:00:00Z")
+
+    service.repository.update_with_history = mock_update_conflict  # type: ignore[method-assign]
+
+    with pytest.raises(AppointmentAlreadyExistsError) as exc_info:
+        await service.reschedule(
+            created.id,
+            AppointmentReschedule(scheduled_at=datetime.now(UTC)),
+            current_user,
+        )
+    assert "Já existe um agendamento ativo" in str(exc_info.value)
+    assert created.lead_full_name in str(exc_info.value)
+

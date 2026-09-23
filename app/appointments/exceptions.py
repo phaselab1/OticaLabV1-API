@@ -9,7 +9,9 @@ class AppointmentNotFoundError(Exception):
 
 class AppointmentAlreadyExistsError(Exception):
     def __init__(self, subject: str, scheduled_at: str) -> None:
-        super().__init__(f"{subject} already has an active appointment at {scheduled_at}")
+        super().__init__(
+            f"Já existe um agendamento ativo para {subject} neste mesmo dia e horário."
+        )
 
 
 def register_appointment_exception_handlers(app: FastAPI) -> None:

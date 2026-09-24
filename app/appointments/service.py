@@ -72,10 +72,7 @@ class AppointmentService:
         if not await self.company_user_service.has_unit_access(
             current_user, appointment.company_id, appointment.company_unit_id
         ):
-            raise ForbiddenError(
-                f"No access to unit {appointment.company_unit_id} "
-                f"of company {appointment.company_id}"
-            )
+            raise ForbiddenError("Você não tem permissão para acessar os agendamentos desta unidade.")
         return appointment
 
     async def get_by_id(self, appointment_id: str, current_user: User) -> Appointment:
@@ -230,10 +227,7 @@ class AppointmentHistoryService:
         if not await self.company_user_service.has_unit_access(
             current_user, appointment.company_id, appointment.company_unit_id
         ):
-            raise ForbiddenError(
-                f"No access to unit {appointment.company_unit_id} "
-                f"of company {appointment.company_id}"
-            )
+            raise ForbiddenError("Você não tem permissão para acessar os agendamentos desta unidade.")
 
         entries, total = await self.repository.get_by_appointment_id(
             appointment_id, page=page, page_size=page_size

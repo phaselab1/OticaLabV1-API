@@ -4,7 +4,7 @@ from fastapi.responses import JSONResponse
 
 class AppointmentNotFoundError(Exception):
     def __init__(self, appointment_id: str) -> None:
-        super().__init__(f"Appointment {appointment_id} not found")
+        super().__init__(f"Agendamento {appointment_id} não encontrado.")
 
 
 class AppointmentAlreadyExistsError(Exception):

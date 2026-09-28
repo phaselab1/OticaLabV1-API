@@ -131,6 +131,11 @@
       "key": "appointment_id",
       "value": "",
       "type": "string"
+    },
+    {
+      "key": "appointment_id_2",
+      "value": "",
+      "type": "string"
     }
   ],
   "item": [
@@ -381,6 +386,209 @@
                 }
               ],
               "body": "{\n    \"detail\": \"Invalid email or password\"\n}"
+            }
+          ],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 401\", function () { pm.response.to.have.status(401); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get authenticated profile (/auth/me)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/auth/me",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "auth",
+                "me"
+              ]
+            },
+            "description": "Retorna o perfil do usuário autenticado, resolvido a partir do `sub` do JWT enviado em `Authorization: Bearer <token>`. A cada chamada a API busca o usuário de novo no banco (não confia só no payload do token) — por isso um token emitido antes de o usuário ser excluído (soft delete) para de funcionar imediatamente, mesmo ainda dentro da janela de 60 minutos de validade."
+          },
+          "response": [
+            {
+              "name": "200 example",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/auth/me",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "auth",
+                    "me"
+                  ]
+                },
+                "description": "Retorna o perfil do usuário autenticado, resolvido a partir do `sub` do JWT enviado em `Authorization: Bearer <token>`. A cada chamada a API busca o usuário de novo no banco (não confia só no payload do token) — por isso um token emitido antes de o usuário ser excluído (soft delete) para de funcionar imediatamente, mesmo ainda dentro da janela de 60 minutos de validade."
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n    \"id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n    \"full_name\": \"Ana Silva\",\n    \"email\": \"ana@oticalab.com\",\n    \"role\": \"attendant\",\n    \"created_at\": \"2026-01-01T12:00:00Z\",\n    \"updated_at\": \"2026-01-01T12:00:00Z\"\n}"
+            }
+          ],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get authenticated profile - sem token (401)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/auth/me",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "auth",
+                "me"
+              ]
+            },
+            "description": "Exemplo de falha: nenhum token enviado.",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": [
+            {
+              "name": "401 example",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/auth/me",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "auth",
+                    "me"
+                  ]
+                },
+                "description": "Exemplo de falha: nenhum token enviado.",
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "status": "OK",
+              "code": 401,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n    \"detail\": \"Missing authentication token\"\n}"
+            }
+          ],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 401\", function () { pm.response.to.have.status(401); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get authenticated profile - token inválido/expirado (401)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/auth/me",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "auth",
+                "me"
+              ]
+            },
+            "description": "Exemplo de falha: token malformado, com assinatura inválida, ou expirado (janela de 60 min).",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "token-invalido-de-propósito",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": [
+            {
+              "name": "401 example",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/auth/me",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "auth",
+                    "me"
+                  ]
+                },
+                "description": "Exemplo de falha: token malformado, com assinatura inválida, ou expirado (janela de 60 min).",
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "token-invalido-de-propósito",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 401,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n    \"detail\": \"Invalid or expired token\"\n}"
             }
           ],
           "event": [
@@ -651,7 +859,7 @@
                   "value": "application/json"
                 }
               ],
-              "body": "{\n    \"id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n    \"full_name\": \"Ana Silva\",\n    \"email\": \"carlos.manager@oticalab.com\",\n    \"role\": \"manager\",\n    \"created_at\": \"2026-01-01T12:00:00Z\",\n    \"updated_at\": \"2026-01-01T12:00:00Z\"\n}"
+              "body": "{\n    \"id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n    \"full_name\": \"Carlos Mendes\",\n    \"email\": \"carlos.manager@oticalab.com\",\n    \"role\": \"manager\",\n    \"created_at\": \"2026-01-01T12:00:00Z\",\n    \"updated_at\": \"2026-01-01T12:00:00Z\"\n}"
             }
           ],
           "event": [
@@ -803,7 +1011,7 @@
                   "value": "application/json"
                 }
               ],
-              "body": "{\n    \"detail\": \"Not authenticated\"\n}"
+              "body": "{\n    \"detail\": \"Missing authentication token\"\n}"
             }
           ],
           "event": [
@@ -998,7 +1206,7 @@
                   "value": "application/json"
                 }
               ],
-              "body": "{\n    \"detail\": \"Resource not found\"\n}"
+              "body": "{\n    \"detail\": \"User 00000000-0000-4000-8000-000000000099 not found\"\n}"
             }
           ],
           "event": [
@@ -1477,7 +1685,7 @@
                   "value": "application/json"
                 }
               ],
-              "body": "{\n    \"detail\": \"Resource not found\"\n}"
+              "body": "{\n    \"detail\": \"Company 00000000-0000-4000-8000-000000000099 not found\"\n}"
             }
           ],
           "event": [
@@ -1649,7 +1857,7 @@
                   "value": "application/json"
                 }
               ],
-              "body": "{\n    \"detail\": \"Resource already exists\"\n}"
+              "body": "{\n    \"detail\": \"Company with CNPJ '90000012345678' already exists\"\n}"
             }
           ],
           "event": [
@@ -2124,7 +2332,7 @@
                   "value": "application/json"
                 }
               ],
-              "body": "{\n    \"detail\": \"Resource not found\"\n}"
+              "body": "{\n    \"detail\": \"Company unit 00000000-0000-4000-8000-000000000099 not found\"\n}"
             }
           ],
           "event": [
@@ -2678,7 +2886,7 @@
     },
     {
       "name": "Customers",
-      "description": "Clientes atendidos (pacientes), cadastrados numa empresa/unidade específicas. `company_id`/`company_unit_id` seguem a regra de auto-preenchimento por papel do usuário — veja a descrição da coleção e de `/docs`. Esta pasta demonstra o cadastro DIRETO de cliente; a pasta Appointments demonstra a outra forma de um cliente passar a existir — criado automaticamente a partir de um agendamento marcado `attended`.",
+      "description": "Clientes atendidos (pacientes), cadastrados numa empresa/unidade específicas. `company_id`/`company_unit_id` seguem a regra de auto-preenchimento por papel do usuário — veja a descrição da coleção e de `/docs`. Esta pasta demonstra o cadastro DIRETO de cliente; a pasta Appointments demonstra a outra forma de um cliente passar a existir — criado automaticamente a partir de um agendamento marcado `attended`. `full_name` também é normalizado em Title Case no backend antes de salvar (mesma regra usada para `lead_full_name` em Appointments) — o valor devolvido na resposta pode diferir do que foi enviado no corpo da requisição.",
       "item": [
         {
           "name": "Create customer (super_admin, IDs explícitos)",
@@ -3244,7 +3452,7 @@
                   "value": "application/json"
                 }
               ],
-              "body": "{\n    \"detail\": \"Resource not found\"\n}"
+              "body": "{\n    \"detail\": \"Customer 00000000-0000-4000-8000-000000000099 not found\"\n}"
             }
           ],
           "event": [
@@ -3416,7 +3624,7 @@
                   "value": "application/json"
                 }
               ],
-              "body": "{\n    \"detail\": \"Resource already exists\"\n}"
+              "body": "{\n    \"detail\": \"Customer 'Bruno Souza' already exists\"\n}"
             }
           ],
           "event": [
@@ -3435,7 +3643,7 @@
     },
     {
       "name": "Appointments",
-      "description": "Agendamentos, escopados à empresa/unidade própria (não mais herdada de um cliente). Começam como LEAD — nome/telefone guardados no próprio agendamento — e só viram cliente de fato (`customers`) quando marcados `attended`. O mesmo lead não pode ter dois agendamentos no mesmo horário exato (índice único parcial, migration `0005`). Toda edição bem-sucedida grava uma linha imutável em `appointment_history`, na mesma transação do UPDATE (função RPC no Postgres).",
+      "description": "Agendamentos, escopados à empresa/unidade própria (não mais herdada de um cliente). Começam como LEAD — nome/telefone guardados no próprio agendamento — e só viram cliente de fato (`customers`) quando marcados `attended`. O mesmo lead não pode ter dois agendamentos no mesmo horário exato (índice único parcial, migration `0005`). Toda edição bem-sucedida grava uma linha imutável em `appointment_history`, na mesma transação do UPDATE (função RPC no Postgres). Duas travas adicionais entram em vigor quando o agendamento já está `attended` (compareceu): (1) `lead_full_name`/`lead_phone` só podem ser editados ENQUANTO o agendamento ainda não virou cliente — depois disso qualquer tentativa de mudar esses dois campos (por qualquer role) recebe 403; (2) um usuário `attendant` especificamente não pode mais alterar (`PUT`) nem reagendar (`PATCH .../reschedule`) um agendamento já `attended` — só `super_admin`/`admin`/`manager` podem. `lead_full_name` é normalizado em Title Case no backend (preposições como 'de/da/do/e' ficam minúsculas, exceto na primeira palavra) antes de salvar, então o valor devolvido pode não ser idêntico, caractere a caractere, ao que foi enviado. `super_admin` pode excluir (soft delete) qualquer agendamento mesmo sem vínculo de unidade — as demais roles continuam exigindo acesso à unidade do agendamento.",
       "item": [
         {
           "name": "Create appointment (lead)",
@@ -3597,7 +3805,7 @@
                   "value": "application/json"
                 }
               ],
-              "body": "{\n    \"detail\": \"Fernanda Costa already has an active appointment at 2026-06-15T14:30:00Z\"\n}"
+              "body": "{\n    \"detail\": \"Já existe um agendamento ativo para Fernanda Costa neste mesmo dia e horário.\"\n}"
             }
           ],
           "event": [
@@ -3988,7 +4196,7 @@
                   "value": "application/json"
                 }
               ],
-              "body": "{\n    \"detail\": \"Resource not found\"\n}"
+              "body": "{\n    \"detail\": \"Agendamento 00000000-0000-4000-8000-000000000099 não encontrado.\"\n}"
             }
           ],
           "event": [
@@ -3998,6 +4206,94 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test(\"Status code is 404\", function () { pm.response.to.have.status(404); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update appointment - editar nome/telefone do lead (sucesso)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/appointments/{{appointment_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "appointments",
+                "{{appointment_id}}"
+              ]
+            },
+            "description": "Edita `lead_full_name`/`lead_phone` — só é permitido enquanto o agendamento ainda não tem `customer_id` e o status ainda não é `attended` (regra adicionada para corrigir cadastro de nome/telefone errado logo depois de marcar o horário). O nome é normalizado em Title Case no backend antes de salvar: o valor enviado em minúsculo volta capitalizado na resposta, com preposições ('de', 'da', 'e'...) em minúsculo quando não são a primeira palavra — isso é uma causa comum de 'a API mudou o que eu mandei' em integrações de frontend que comparam o payload enviado com a resposta byte a byte.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"lead_full_name\": \"fernanda costa de souza\",\n    \"lead_phone\": \"11999998888\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [
+            {
+              "name": "200 example",
+              "originalRequest": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/appointments/{{appointment_id}}",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "appointments",
+                    "{{appointment_id}}"
+                  ]
+                },
+                "description": "Edita `lead_full_name`/`lead_phone` — só é permitido enquanto o agendamento ainda não tem `customer_id` e o status ainda não é `attended` (regra adicionada para corrigir cadastro de nome/telefone errado logo depois de marcar o horário). O nome é normalizado em Title Case no backend antes de salvar: o valor enviado em minúsculo volta capitalizado na resposta, com preposições ('de', 'da', 'e'...) em minúsculo quando não são a primeira palavra — isso é uma causa comum de 'a API mudou o que eu mandei' em integrações de frontend que comparam o payload enviado com a resposta byte a byte.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n    \"lead_full_name\": \"fernanda costa de souza\",\n    \"lead_phone\": \"11999998888\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n    \"id\": \"f1a2c3d4-0000-4000-8000-000000000005\",\n    \"company_id\": \"c1a2c3d4-0000-4000-8000-000000000001\",\n    \"company_unit_id\": \"d1a2c3d4-0000-4000-8000-000000000002\",\n    \"lead_full_name\": \"Fernanda Costa de Souza\",\n    \"lead_phone\": \"11999998888\",\n    \"customer_id\": null,\n    \"created_by_user_id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n    \"updated_by_user_id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n    \"scheduled_at\": \"2026-06-15T14:30:00Z\",\n    \"status\": \"scheduled\",\n    \"notes\": \"Primeira consulta\",\n    \"created_at\": \"2026-01-01T12:00:00Z\",\n    \"updated_at\": \"2026-01-01T12:00:00Z\"\n}"
+            }
+          ],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Nome veio normalizado em Title Case\", function () { pm.expect(pm.response.json().lead_full_name).to.eql(\"Fernanda Costa de Souza\"); });"
                 ]
               }
             }
@@ -4281,7 +4577,7 @@
                 "{{appointment_id}}"
               ]
             },
-            "description": "Marcar `status: \"attended\"` (compareceu) pela primeira vez promove o lead a cliente: a API procura um cliente já existente com o mesmo nome + nascimento nesta empresa (reaproveita se achar) ou cria um novo em `customers`, e liga `customer_id` ao agendamento — sem chamada extra do lado do cliente da API. `cancelled`/`no_show` nunca promovem.",
+            "description": "Marcar `status: \"attended\"` (compareceu) pela primeira vez promove o lead a cliente: a API procura um cliente já existente com o mesmo nome (`full_name`) nesta empresa (reaproveita se achar) ou cria um novo em `customers`, e liga `customer_id` ao agendamento — sem chamada extra do lado do cliente da API. `cancelled`/`no_show` nunca promovem.",
             "body": {
               "mode": "raw",
               "raw": "{\n    \"status\": \"attended\"\n}",
@@ -4313,7 +4609,7 @@
                     "{{appointment_id}}"
                   ]
                 },
-                "description": "Marcar `status: \"attended\"` (compareceu) pela primeira vez promove o lead a cliente: a API procura um cliente já existente com o mesmo nome + nascimento nesta empresa (reaproveita se achar) ou cria um novo em `customers`, e liga `customer_id` ao agendamento — sem chamada extra do lado do cliente da API. `cancelled`/`no_show` nunca promovem.",
+                "description": "Marcar `status: \"attended\"` (compareceu) pela primeira vez promove o lead a cliente: a API procura um cliente já existente com o mesmo nome (`full_name`) nesta empresa (reaproveita se achar) ou cria um novo em `customers`, e liga `customer_id` ao agendamento — sem chamada extra do lado do cliente da API. `cancelled`/`no_show` nunca promovem.",
                 "body": {
                   "mode": "raw",
                   "raw": "{\n    \"status\": \"attended\"\n}",
@@ -4350,13 +4646,611 @@
               }
             }
           ]
+        },
+        {
+          "name": "Update appointment - bloqueio: nome/telefone travados após virar cliente (403)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/appointments/{{appointment_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "appointments",
+                "{{appointment_id}}"
+              ]
+            },
+            "description": "Exemplo de falha: depois que o agendamento tem `customer_id` (ou está `attended`), `lead_full_name`/`lead_phone` ficam travados — a API rejeita qualquer tentativa de mudá-los, para não desalinhar o nome do agendamento do nome já usado no cadastro de cliente. Vale para qualquer role, não só `attendant`.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"lead_full_name\": \"Outro Nome Qualquer\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [
+            {
+              "name": "403 example",
+              "originalRequest": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/appointments/{{appointment_id}}",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "appointments",
+                    "{{appointment_id}}"
+                  ]
+                },
+                "description": "Exemplo de falha: depois que o agendamento tem `customer_id` (ou está `attended`), `lead_full_name`/`lead_phone` ficam travados — a API rejeita qualquer tentativa de mudá-los, para não desalinhar o nome do agendamento do nome já usado no cadastro de cliente. Vale para qualquer role, não só `attendant`.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n    \"lead_full_name\": \"Outro Nome Qualquer\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "OK",
+              "code": 403,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n    \"detail\": \"Nome e telefone s\\u00f3 podem ser alterados enquanto o agendamento n\\u00e3o for cliente.\"\n}"
+            }
+          ],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 403\", function () { pm.response.to.have.status(403); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update appointment - bloqueio: attendant não pode alterar comparecido (403)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/appointments/{{appointment_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "appointments",
+                "{{appointment_id}}"
+              ]
+            },
+            "description": "Exemplo de falha: um `attendant` (token de 'Login as attendant' na pasta Users) não pode mais alterar um agendamento que já está `attended` — só `super_admin`/`admin`/`manager` podem. Note que o token é válido e o agendamento existe: a rejeição é puramente pela combinação role + status atual do agendamento.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"notes\": \"Tentando editar como attendant\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{attendant_access_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": [
+            {
+              "name": "403 example",
+              "originalRequest": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/appointments/{{appointment_id}}",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "appointments",
+                    "{{appointment_id}}"
+                  ]
+                },
+                "description": "Exemplo de falha: um `attendant` (token de 'Login as attendant' na pasta Users) não pode mais alterar um agendamento que já está `attended` — só `super_admin`/`admin`/`manager` podem. Note que o token é válido e o agendamento existe: a rejeição é puramente pela combinação role + status atual do agendamento.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n    \"notes\": \"Tentando editar como attendant\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{attendant_access_token}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 403,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n    \"detail\": \"Agendamento j\\u00e1 marcado como comparecido n\\u00e3o pode ser alterado por atendente.\"\n}"
+            }
+          ],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 403\", function () { pm.response.to.have.status(403); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Reschedule appointment - bloqueio: attendant não pode reagendar comparecido (403)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/appointments/{{appointment_id}}/reschedule",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "appointments",
+                "{{appointment_id}}",
+                "reschedule"
+              ]
+            },
+            "description": "Exemplo de falha: mesma trava do exemplo anterior, mas no endpoint dedicado de reagendamento — a mensagem de erro é ligeiramente diferente ('reagendado' em vez de 'alterado'), então trate as duas como o mesmo tipo de erro (403 + role attendant + status attended), não pelo texto exato.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"scheduled_at\": \"2026-07-15T10:00:00Z\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{attendant_access_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": [
+            {
+              "name": "403 example",
+              "originalRequest": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/appointments/{{appointment_id}}/reschedule",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "appointments",
+                    "{{appointment_id}}",
+                    "reschedule"
+                  ]
+                },
+                "description": "Exemplo de falha: mesma trava do exemplo anterior, mas no endpoint dedicado de reagendamento — a mensagem de erro é ligeiramente diferente ('reagendado' em vez de 'alterado'), então trate as duas como o mesmo tipo de erro (403 + role attendant + status attended), não pelo texto exato.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n    \"scheduled_at\": \"2026-07-15T10:00:00Z\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{attendant_access_token}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 403,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n    \"detail\": \"Agendamento j\\u00e1 marcado como comparecido n\\u00e3o pode ser reagendado por atendente.\"\n}"
+            }
+          ],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 403\", function () { pm.response.to.have.status(403); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create appointment (lead) - segundo horário, mesmo nome",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/appointments/",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "appointments",
+                ""
+              ]
+            },
+            "description": "Cria um segundo agendamento com o MESMO nome (\"fernanda costa de souza\", mesma normalização Title Case do exemplo de edição acima) na mesma empresa, em outro horário. Serve só para, no próximo passo, promovê-lo e reaproveitar o cliente já criado — montando o cenário do conflito de reagendamento (409) mais abaixo.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"lead_full_name\": \"fernanda costa de souza\",\n    \"lead_phone\": \"11999998888\",\n    \"scheduled_at\": \"2026-07-01T09:00:00Z\",\n    \"notes\": \"Retorno\",\n    \"company_id\": \"{{company_id}}\",\n    \"company_unit_id\": \"{{unit_id}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [
+            {
+              "name": "201 example",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/appointments/",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "appointments",
+                    ""
+                  ]
+                },
+                "description": "Cria um segundo agendamento com o MESMO nome (\"fernanda costa de souza\", mesma normalização Title Case do exemplo de edição acima) na mesma empresa, em outro horário. Serve só para, no próximo passo, promovê-lo e reaproveitar o cliente já criado — montando o cenário do conflito de reagendamento (409) mais abaixo.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n    \"lead_full_name\": \"fernanda costa de souza\",\n    \"lead_phone\": \"11999998888\",\n    \"scheduled_at\": \"2026-07-01T09:00:00Z\",\n    \"notes\": \"Retorno\",\n    \"company_id\": \"{{company_id}}\",\n    \"company_unit_id\": \"{{unit_id}}\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "OK",
+              "code": 201,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n    \"id\": \"f1a2c3d4-0000-4000-8000-000000000009\",\n    \"company_id\": \"c1a2c3d4-0000-4000-8000-000000000001\",\n    \"company_unit_id\": \"d1a2c3d4-0000-4000-8000-000000000002\",\n    \"lead_full_name\": \"Fernanda Costa de Souza\",\n    \"lead_phone\": \"11999998888\",\n    \"customer_id\": null,\n    \"created_by_user_id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n    \"updated_by_user_id\": null,\n    \"scheduled_at\": \"2026-07-01T09:00:00Z\",\n    \"status\": \"scheduled\",\n    \"notes\": \"Retorno\",\n    \"created_at\": \"2026-01-03T09:00:00Z\",\n    \"updated_at\": \"2026-01-03T09:00:00Z\"\n}"
+            }
+          ],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 201\", function () { pm.response.to.have.status(201); });",
+                  "if (pm.response.code < 300) { const body = pm.response.json(); pm.collectionVariables.set(\"appointment_id_2\", body.id); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update appointment 2 (attended — reaproveita cliente existente)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/appointments/{{appointment_id_2}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "appointments",
+                "{{appointment_id_2}}"
+              ]
+            },
+            "description": "Marca o segundo agendamento como `attended`. Como já existe um cliente ativo com o exato mesmo `full_name` nesta empresa (criado ao promover o primeiro agendamento), a API REAPROVEITA esse cliente em vez de criar um duplicado — `customer_id` sai igual ao `promoted_customer_id` salvo antes. Isso é o comportamento de `get_by_identity` em `app/customers/repository.py`, casado por `company_id` + `full_name` exatos.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"status\": \"attended\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [
+            {
+              "name": "200 example",
+              "originalRequest": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/appointments/{{appointment_id_2}}",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "appointments",
+                    "{{appointment_id_2}}"
+                  ]
+                },
+                "description": "Marca o segundo agendamento como `attended`. Como já existe um cliente ativo com o exato mesmo `full_name` nesta empresa (criado ao promover o primeiro agendamento), a API REAPROVEITA esse cliente em vez de criar um duplicado — `customer_id` sai igual ao `promoted_customer_id` salvo antes. Isso é o comportamento de `get_by_identity` em `app/customers/repository.py`, casado por `company_id` + `full_name` exatos.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n    \"status\": \"attended\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n    \"id\": \"f1a2c3d4-0000-4000-8000-000000000009\",\n    \"company_id\": \"c1a2c3d4-0000-4000-8000-000000000001\",\n    \"company_unit_id\": \"d1a2c3d4-0000-4000-8000-000000000002\",\n    \"lead_full_name\": \"Fernanda Costa de Souza\",\n    \"lead_phone\": \"11999998888\",\n    \"customer_id\": \"e1a2c3d4-0000-4000-8000-000000000004\",\n    \"created_by_user_id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n    \"updated_by_user_id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n    \"scheduled_at\": \"2026-07-01T09:00:00Z\",\n    \"status\": \"attended\",\n    \"notes\": \"Retorno\",\n    \"created_at\": \"2026-01-03T09:00:00Z\",\n    \"updated_at\": \"2026-01-03T09:05:00Z\"\n}"
+            }
+          ],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Reaproveitou o mesmo cliente do primeiro agendamento\", function () { pm.expect(pm.response.json().customer_id).to.eql(pm.collectionVariables.get(\"promoted_customer_id\")); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Reschedule appointment 2 - conflito com agendamento do mesmo cliente (409)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/appointments/{{appointment_id_2}}/reschedule",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "appointments",
+                "{{appointment_id_2}}",
+                "reschedule"
+              ]
+            },
+            "description": "Exemplo de falha (fix recente): tenta reagendar o segundo agendamento para o MESMO horário em que o primeiro agendamento deste cliente está marcado (`2026-06-20T10:00:00Z`, setado no exemplo 'Reschedule appointment (PATCH dedicado)' acima). Como os dois agendamentos já compartilham o mesmo `customer_id`, o índice único parcial `uq_appointments_customer_scheduled_at` (`customer_id, scheduled_at` onde `deleted_at IS NULL`) barra a colisão. Antes do fix em `98452b9`, esse `23505` do Postgres vazava como um `500` genérico; agora vira um `409` com mensagem amigável.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"scheduled_at\": \"2026-06-20T10:00:00Z\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [
+            {
+              "name": "409 example",
+              "originalRequest": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/appointments/{{appointment_id_2}}/reschedule",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "appointments",
+                    "{{appointment_id_2}}",
+                    "reschedule"
+                  ]
+                },
+                "description": "Exemplo de falha (fix recente): tenta reagendar o segundo agendamento para o MESMO horário em que o primeiro agendamento deste cliente está marcado (`2026-06-20T10:00:00Z`, setado no exemplo 'Reschedule appointment (PATCH dedicado)' acima). Como os dois agendamentos já compartilham o mesmo `customer_id`, o índice único parcial `uq_appointments_customer_scheduled_at` (`customer_id, scheduled_at` onde `deleted_at IS NULL`) barra a colisão. Antes do fix em `98452b9`, esse `23505` do Postgres vazava como um `500` genérico; agora vira um `409` com mensagem amigável.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n    \"scheduled_at\": \"2026-06-20T10:00:00Z\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "OK",
+              "code": 409,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n    \"detail\": \"J\\u00e1 existe um agendamento ativo para Fernanda Costa de Souza neste mesmo dia e hor\\u00e1rio.\"\n}"
+            }
+          ],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 409\", function () { pm.response.to.have.status(409); });"
+                ]
+              }
+            }
+          ]
         }
       ]
     },
     {
       "name": "Cleanup",
-      "description": "Reverte tudo que as pastas anteriores criaram (soft delete), na ordem certa de dependência — deixa a coleção pronta pra rodar de novo do zero, e documenta todos os endpoints DELETE que ainda não apareceram (agendamento, cliente, vínculos de acesso, unidade, empresa, usuários). Rode por último, depois de todas as outras pastas.",
+      "description": "Reverte tudo que as pastas anteriores criaram (soft delete), na ordem certa de dependência — deixa a coleção pronta pra rodar de novo do zero, e documenta todos os endpoints DELETE que ainda não apareceram (agendamento, cliente, vínculos de acesso, unidade, empresa, usuários). Rode por último, depois de todas as outras pastas. Repare que o cliente promovido é excluído ANTES dos dois agendamentos ligados a ele, de propósito — veja a descrição de 'Delete customer (promovido via agendamento)' para o porquê.",
       "item": [
+        {
+          "name": "Delete customer (promovido via agendamento)",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/customers/{{promoted_customer_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "customers",
+                "{{promoted_customer_id}}"
+              ]
+            },
+            "description": "Remove (soft delete) o cliente criado automaticamente ao marcar o agendamento de demonstração como `attended`. Feito de propósito ANTES de excluir os agendamentos 'Delete appointment'/'Delete appointment 2' logo abaixo, para demonstrar o fix das migrations `0007`/`0008`: antes dele, excluir um agendamento cujo `customer_id` já estava desativado era barrado pela trigger `enforce_appointment_parents_valid` com `customer % is deactivated` (400). Agora a trigger pula essa checagem quando a própria linha do agendamento está sendo soft-deletada, então a sequência cliente-desativado-depois-agendamento sempre funciona."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 204\", function () { pm.response.to.have.status(204); });"
+                ]
+              }
+            }
+          ]
+        },
         {
           "name": "Delete appointment",
           "request": {
@@ -4372,7 +5266,37 @@
                 "{{appointment_id}}"
               ]
             },
-            "description": "Remove o agendamento de teste (soft delete) — reservado para erro de cadastro/duplicata. Para cancelar de verdade, prefira PUT com status `cancelled` (mantém visível e gera histórico)."
+            "description": "Remove o agendamento de teste (soft delete) — reservado para erro de cadastro/duplicata. Para cancelar de verdade, prefira PUT com status `cancelled` (mantém visível e gera histórico). Roda DEPOIS de 'Delete customer (promovido via agendamento)' logo acima, de propósito: veja a explicação lá sobre o fix de soft-delete com cliente já desativado."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 204\", function () { pm.response.to.have.status(204); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete appointment 2",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/appointments/{{appointment_id_2}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "appointments",
+                "{{appointment_id_2}}"
+              ]
+            },
+            "description": "Remove o segundo agendamento de demonstração (também ligado ao cliente já desativado acima — mesmo cenário do fix de soft-delete)."
           },
           "response": [],
           "event": [
@@ -4512,36 +5436,6 @@
               ]
             },
             "description": "Remove o segundo cliente de teste (criado via auto-preenchimento pelo manager)."
-          },
-          "response": [],
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test(\"Status code is 204\", function () { pm.response.to.have.status(204); });"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "Delete customer (promovido via agendamento)",
-          "request": {
-            "method": "DELETE",
-            "header": [],
-            "url": {
-              "raw": "{{base_url}}/customers/{{promoted_customer_id}}",
-              "host": [
-                "{{base_url}}"
-              ],
-              "path": [
-                "customers",
-                "{{promoted_customer_id}}"
-              ]
-            },
-            "description": "Remove o cliente criado automaticamente ao marcar o agendamento de demonstração como `attended`."
           },
           "response": [],
           "event": [

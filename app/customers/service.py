@@ -38,9 +38,12 @@ class CustomerService:
         company_unit_id: str | None = None,
     ) -> Page[Customer]:
         if current_user.role != UserRole.SUPER_ADMIN:
-            company_id, company_unit_id = await self.company_user_service.resolve_company_and_unit(
+            company_id, company_unit_id = await self.company_user_service.resolve_scope_for_list(
                 current_user, company_id, company_unit_id
             )
+
+        if company_id == "__none__":
+            return Page(items=[], page=page, page_size=page_size, total=0)
 
         customers, total = await self.repository.get_all(
             page=page, page_size=page_size, company_id=company_id, company_unit_id=company_unit_id

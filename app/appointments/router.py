@@ -75,6 +75,8 @@ async def list_appointments(
     current_user: CurrentUser,
     page: Annotated[int, Query(ge=1, description="Número da página, começando em 1.")] = 1,
     page_size: Annotated[int, Query(ge=1, le=100, description="Itens por página (máx. 100).")] = 20,
+    company_id: Annotated[str | None, Query(description="Filtra por UUID da empresa.")] = None,
+    company_unit_id: Annotated[str | None, Query(description="Filtra por UUID da unidade.")] = None,
     customer_id: Annotated[str | None, Query(description="Filtra por UUID do cliente.")] = None,
     status_filter: Annotated[
         AppointmentStatus | None, Query(alias="status", description="Filtra por status.")
@@ -89,6 +91,8 @@ async def list_appointments(
         current_user,
         page=page,
         page_size=page_size,
+        company_id=company_id,
+        company_unit_id=company_unit_id,
         customer_id=customer_id,
         status=status_filter,
     )

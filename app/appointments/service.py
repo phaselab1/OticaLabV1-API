@@ -40,16 +40,18 @@ class AppointmentService:
         *,
         page: int,
         page_size: int,
+        company_id: str | None = None,
+        company_unit_id: str | None = None,
         customer_id: str | None = None,
         status: AppointmentStatus | None = None,
     ) -> Page[Appointment]:
-        company_id: str | None = None
-        company_unit_id: str | None = None
-
         if current_user.role != UserRole.SUPER_ADMIN:
-            company_id, company_unit_id = await self.company_user_service.resolve_company_and_unit(
-                current_user, None, None
+            company_id, company_unit_id = await self.company_user_service.resolve_scope_for_list(
+                current_user, company_id, company_unit_id
             )
+
+        if company_id == "__none__":
+            return Page(items=[], page=page, page_size=page_size, total=0)
 
         appointments, total = await self.repository.get_all(
             page=page,

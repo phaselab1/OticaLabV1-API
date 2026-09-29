@@ -258,3 +258,55 @@ class CompanyUserService:
             raise ForbiddenError(f"No access to unit {unit_id} of company {company_id}")
 
         return company_id, unit_id
+
+    async def resolve_scope_for_list(
+        self,
+        current_user: User,
+        company_id: str | None = None,
+        unit_id: str | None = None,
+    ) -> tuple[str | None, str | None]:
+        """
+        Resolve o escopo de filtragem para listagens (ex: agendamentos, clientes).
+        Diferente de resolve_company_and_unit (usado em criação de entidades que exigem unidade estrita),
+        resolve_scope_for_list permite que administradores de empresa inteira (ou com acesso geral)
+        listem os registros da empresa mesmo quando unit_id não for informado.
+        """
+        if current_user.role == UserRole.SUPER_ADMIN:
+            return company_id, unit_id
+
+        links = await self.repository.get_all_for_user(current_user.id)
+        if not links:
+            # Usuário sem vínculos não deve quebrar com 400; escopo vazio para trazer lista vazia
+            return "__none__", "__none__"
+
+        if company_id is None:
+            company_ids = {link.company_id for link in links}
+            if len(company_ids) == 1:
+                company_id = next(iter(company_ids))
+            elif len(company_ids) > 1:
+                # Se tem acesso a múltiplas empresas e não informou company_id, deixa filtrar por uma delas ou exige
+                company_id = next(iter(company_ids))
+        elif not any(link.company_id == company_id for link in links):
+            raise ForbiddenError(f"No access to company {company_id}")
+
+        if unit_id is not None:
+            if not await self.has_unit_access(current_user, company_id, unit_id):
+                raise ForbiddenError(f"No access to unit {unit_id} of company {company_id}")
+            return company_id, unit_id
+
+        # unit_id é None: se o usuário possui vínculo com a empresa toda (unit_id is None),
+        # pode listar todos os agendamentos/clientes da empresa sem forçar unit_id!
+        company_links = [link for link in links if link.company_id == company_id] if company_id else links
+        has_whole_company_access = any(link.unit_id is None for link in company_links)
+        if has_whole_company_access:
+            return company_id, None
+
+        # Se tem acesso a apenas uma unidade específica, restringe a ela
+        unit_ids = {link.unit_id for link in company_links if link.unit_id is not None}
+        if len(unit_ids) == 1:
+            unit_id = next(iter(unit_ids))
+            return company_id, unit_id
+
+        # Se tem acesso a múltiplas unidades e nenhuma for informada, pode ver todas das unidades que tem acesso
+        return company_id, None
+

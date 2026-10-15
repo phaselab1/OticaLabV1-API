@@ -1,13 +1,14 @@
 import {
-  ConflictException,
   ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
 import { PageDto } from '@/common/dto/pagination.dto';
 import { AppointmentStatus, UserRole } from '@/common/enums';
+import { normalizePhone } from '@/common/utils/phone.util';
 import { formatTitleCase } from '@/common/utils/text.util';
 import { CompanyUserService } from '@/modules/companies/companies.service';
+import { CustomerMatchingService } from '@/modules/customers/customer-matching.service';
 import { CustomersService } from '@/modules/customers/customers.service';
 import { User } from '@/modules/users/entities/user.entity';
 import {
@@ -30,6 +31,7 @@ export class AppointmentsService {
     private readonly repository: AppointmentRepository,
     private readonly customersService: CustomersService,
     private readonly companyUserService: CompanyUserService,
+    private readonly customerMatching: CustomerMatchingService,
   ) {}
 
   private async getWithAccessCheck(
@@ -130,38 +132,14 @@ export class AppointmentsService {
     appointment: Appointment,
     currentUser: User,
   ): Promise<string> {
-    const customerRepo = this.customersService.getCustomerRepository();
-    const existingCustomer = await customerRepo.getByIdentity(
-      appointment.company_id,
-      appointment.lead_full_name,
-    );
-    if (existingCustomer) {
-      return existingCustomer.id;
-    }
-
-    try {
-      const created = await customerRepo.create({
-        company_id: appointment.company_id,
-        company_unit_id: appointment.company_unit_id,
-        full_name: appointment.lead_full_name,
-        phone: appointment.lead_phone,
-        created_by_user_id: currentUser.id,
-        updated_by_user_id: currentUser.id,
-      });
-      return created.id;
-    } catch (err: any) {
-      if (err instanceof ConflictException) {
-        // Race condition handling
-        const concurrent = await customerRepo.getByIdentity(
-          appointment.company_id,
-          appointment.lead_full_name,
-        );
-        if (concurrent) {
-          return concurrent.id;
-        }
-      }
-      throw err;
-    }
+    const { customerId } = await this.customerMatching.resolve({
+      companyId: appointment.company_id,
+      companyUnitId: appointment.company_unit_id,
+      userId: currentUser.id,
+      fullName: appointment.lead_full_name,
+      phone: normalizePhone(appointment.lead_phone),
+    });
+    return customerId;
   }
 
   async update(

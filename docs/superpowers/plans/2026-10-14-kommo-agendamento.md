@@ -24,7 +24,8 @@
 - Upsert: existe agendamento `scheduled` não deletado com o mesmo `(company_id, kommo_lead_id)` → atualiza (com linha em `appointment_history`). Se só houver `attended`/`no_show`/`cancelled` → cria novo.
 - Cliente: busca por `kommo_contact_id`; depois por telefone (com e sem o 9º dígito após o DDD); senão cria. Grava o vínculo `kommo_contact_id`.
 - Telefone no formato do schema atual: só dígitos, 10–11 (DDD + número, sem `55`) — `chk_customers_phone_format`. Inválido → `phone=null` + `needs_review=true`, nunca bloqueia.
-- Identidade do cliente é o **telefone**, não o nome (nomes repetidos são comuns em ótica). A Task 0B troca `UNIQUE (company_id, full_name)` por `UNIQUE (company_id, phone) WHERE phone IS NOT NULL AND deleted_at IS NULL`. Mesmo nome com outro telefone → cria cliente normalmente, sem flag. Sem telefone → sempre cria cliente novo.
+- Identidade do cliente (Task 0B, `CustomerMatchingService`, usada pelo Kommo e pelo "Comparecer"): `kommo_contact_id` → telefone (com/sem 9º dígito) **e** `similarity(norm(nome)) >= 0.85` → reutiliza; telefone igual e similaridade entre 0.6 e 0.85 → cria novo com `needs_review` ("Possível duplicado de <id>"); senão cria novo. Telefone é compartilhado por famílias, então não há índice único em telefone nem em nome. Nunca merge automático.
+- Fora do escopo (issue separada): limpeza de telefones legados no formato `5563xxxxxxxx` e revisão manual dos ~4 grupos com nomes quase iguais.
 - Listagem/agenda: `scheduled_time_unknown=true` é exibido como "horário a confirmar", nunca 00:00. A API expõe o campo na resposta; a interface deve usá-lo.
 - Indicação: campo de lead `referral_field_id` (Zyros `566124`), opcional → `notes = "Indicação: <valor>"`.
 - Telefone do contato: campo `phone_field_id` (Zyros `268220`).
@@ -55,7 +56,7 @@ src/config/app.config.ts                          + kommoEncryptionKey, kommoWor
 src/main.ts                                       urlencoded extended
 src/app.module.ts                                 + ScheduleModule, KommoModule
 src/modules/customers/entities/customer.entity.ts + kommo_contact_id, needs_review; phone nullable
-src/modules/customers/repositories/customer.repository.ts  + findByKommoContactId, findByPhones, createForKommo, linkKommoContact
+src/modules/customers/  (Task 0B) CustomerMatchingService, matchByPhone, findByKommoContactId, linkKommoContact
 src/modules/appointments/entities/appointment.entity.ts    + kommo_lead_id, needs_review, review_reason, scheduled_time_unknown
 src/modules/appointments/repositories/appointment.repository.ts + upsertFromKommo
 src/modules/kommo/
@@ -93,142 +94,440 @@ git checkout main && git pull && git checkout -b feat/kommo-agendamento
 
 ---
 
-### Task 0B: Cliente identificado por telefone
+### Task 0B: Identificação de cliente por telefone + similaridade de nome
+
+Telefone é compartilhado por famílias (123 grupos em produção, todos com nomes distintos), então telefone sozinho **não** identifica o cliente. Regra única, usada pelo Kommo (Task 7) e pelo "Comparecer" (`promoteLeadToCustomer`):
+
+1. `kommo_contact_id` (só Kommo; coluna criada na Task 1) → reutiliza.
+2. Candidatos com o mesmo telefone (com/sem 9º dígito), pontuados por `similarity(norm(full_name), norm(nome))`, `norm = lower(unaccent(trim(x)))`:
+   - melhor score `>= 0.85` → reutiliza esse cliente;
+   - melhor score `>= 0.6` e `< 0.85` → cria cliente novo com `needs_review=true`, `review_reason = 'Possível duplicado de <id>'`;
+   - senão (ou sem telefone) → cria cliente novo.
+3. Nunca faz merge automático.
 
 **Files:**
-- Create: `db/migrations/0009_customers_unique_phone.sql`
-- Modify: `src/modules/customers/repositories/customer.repository.ts` (mensagens de conflito; `getByIdentity` → `findByPhones`)
-- Modify: `src/modules/appointments/appointments.service.ts` (`promoteLeadToCustomer`)
-- Modify: `src/modules/appointments/appointments.service.spec.ts`, `src/modules/customers/customers.service.spec.ts`
-- Create: `src/common/utils/phone.util.ts`, `phone.util.spec.ts` (o `normalizePhone`/`phoneVariants` da Task 2 passa a morar aqui, porque clientes e Kommo usam)
+- Create: `db/migrations/0009_customer_matching.sql`
+- Create: `src/common/utils/phone.util.ts`, `phone.util.spec.ts` (código e testes da seção "telefone" da Task 2)
+- Create: `src/modules/customers/customer-matching.ts`, `customer-matching.spec.ts`
+- Create: `src/modules/customers/customer-matching.service.ts`, `customer-matching.service.spec.ts`
+- Modify: `src/modules/customers/entities/customer.entity.ts`, `repositories/customer.repository.ts`, `customers.module.ts`
+- Modify: `src/modules/appointments/appointments.service.ts` (`promoteLeadToCustomer`), `appointments.service.spec.ts`
 
 **Interfaces:**
-- Produces: `normalizePhone`, `phoneVariants` em `@/common/utils/phone.util` (assinaturas e testes exatamente os da Task 2, que passa a só importar daqui); `CustomerRepository.findByPhones(companyId: string, phones: string[]): Promise<Customer | null>` (código na Task 4, movido para cá); `getByIdentity` removido.
-
-- [ ] **Step 1: Checar duplicados antes de migrar** (no banco de produção, só leitura):
-
-```sql
-SELECT company_id, phone, count(*), array_agg(id) FROM customers
-WHERE phone IS NOT NULL AND deleted_at IS NULL
-GROUP BY company_id, phone HAVING count(*) > 1;
-```
-
-Se houver linhas, **parar** e mostrar ao usuário: a migration falharia e a fusão de cadastros duplicados é decisão dele.
-
-- [ ] **Step 2: Migration**
-
-```sql
--- Identidade do cliente passa a ser o telefone: nomes repetidos são comuns.
-ALTER TABLE customers DROP CONSTRAINT uq_customers_company_id_full_name;
-
-CREATE UNIQUE INDEX uq_customers_company_phone
-ON customers (company_id, phone)
-WHERE phone IS NOT NULL AND deleted_at IS NULL;
-
-DROP INDEX IF EXISTS idx_customers_phone;
-CREATE INDEX idx_customers_company_full_name ON customers (company_id, full_name);
-```
-
-Aplicar em local/staging: `psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f db/migrations/0009_customers_unique_phone.sql`. Validar: dois `INSERT` com mesmo nome e telefones diferentes → ok; mesmo telefone → `23505`.
-
-- [ ] **Step 3: Teste que falha em `appointments.service.spec.ts`** — substituir os mocks `getByIdentity` por `findByPhones` e adicionar:
+- Produces:
+  - `normalizePhone`, `phoneVariants` em `@/common/utils/phone.util`.
+  - `type CustomerCandidate = { id: string; score: number }`
+  - `classifyCustomerMatch(candidates: CustomerCandidate[]): { kind: 'reuse'; id: string } | { kind: 'possible_duplicate'; id: string } | { kind: 'new' }`
+  - `CustomerRepository.matchByPhone(companyId: string, phones: string[], fullName: string): Promise<CustomerCandidate[]>`
+  - `CustomerRepository.findByKommoContactId(companyId: string, contactId: number): Promise<Customer | null>`
+  - `CustomerRepository.linkKommoContact(customerId: string, contactId: number, userId: string): Promise<void>`
+  - `CustomerMatchingService.resolve(input: ResolveCustomerInput): Promise<ResolvedCustomer>`
 
 ```ts
-  it('ao comparecer, reaproveita cliente pelo telefone (com/sem 9º dígito)', async () => {
-    const appointment = new Appointment({
-      id: 'apt-1', company_id: 'comp-1', company_unit_id: 'unit-1',
-      lead_full_name: 'Maria', lead_phone: '6391234567',
-      customer_id: null, status: AppointmentStatus.SCHEDULED,
-    });
-    mockAppointmentRepo.getById.mockResolvedValue(appointment);
-    mockCompanyUserService.hasUnitAccess.mockResolvedValue(true);
-    mockCustomerRepo.findByPhones.mockResolvedValue({ id: 'cust-9' });
-    mockAppointmentRepo.updateWithHistory.mockResolvedValue(
-      new Appointment({ ...appointment, status: AppointmentStatus.ATTENDED, customer_id: 'cust-9' }),
-    );
+export interface ResolveCustomerInput {
+  companyId: string;
+  companyUnitId: string;
+  userId: string;
+  fullName: string;
+  phone: string | null; // já normalizado (normalizePhone)
+  kommoContactId?: number | null;
+}
+export interface ResolvedCustomer {
+  customerId: string;
+  created: boolean;
+  reviewReason: string | null; // 'Possível duplicado de <id>' ou null
+}
+```
 
-    await service.update('apt-1', { status: AppointmentStatus.ATTENDED } as any, adminUser);
+- [ ] **Step 1: Migration `0009_customer_matching.sql`**
 
-    expect(mockCustomerRepo.findByPhones).toHaveBeenCalledWith('comp-1', ['6391234567', '63991234567']);
-    expect(mockCustomerRepo.create).not.toHaveBeenCalled();
+Antes de escrever, rodar `\dx` no banco: se as extensões existentes ficam no schema `extensions` (padrão Supabase), usar `WITH SCHEMA extensions` e manter `extensions` no `search_path` da função; senão, criar em `public` e ajustar o `search_path`.
+
+```sql
+-- Telefone é compartilhado por famílias: identidade = telefone + similaridade de nome.
+CREATE EXTENSION IF NOT EXISTS unaccent WITH SCHEMA extensions;
+CREATE EXTENSION IF NOT EXISTS pg_trgm WITH SCHEMA extensions;
+
+ALTER TABLE customers DROP CONSTRAINT uq_customers_company_id_full_name;
+
+DROP INDEX IF EXISTS idx_customers_phone;
+CREATE INDEX idx_customers_company_phone ON customers (company_id, phone) WHERE deleted_at IS NULL;
+
+ALTER TABLE customers
+    ADD COLUMN needs_review BOOLEAN NOT NULL DEFAULT FALSE,
+    ADD COLUMN review_reason TEXT;
+
+CREATE OR REPLACE FUNCTION match_customers_by_phone(
+    p_company_id UUID,
+    p_phones TEXT[],
+    p_full_name TEXT
+)
+RETURNS TABLE (id UUID, score REAL)
+LANGUAGE sql
+STABLE
+SET search_path = public, extensions
+AS $$
+    SELECT c.id,
+           similarity(lower(unaccent(trim(c.full_name))), lower(unaccent(trim(p_full_name)))) AS score
+    FROM customers c
+    WHERE c.company_id = p_company_id
+      AND c.phone = ANY (p_phones)
+      AND c.deleted_at IS NULL
+    ORDER BY score DESC, c.created_at ASC;
+$$;
+```
+
+No fim do arquivo, aplicar à função o mesmo padrão de `REVOKE`/`GRANT` usado em `0002_security_hardening.sql`/`0003_restore_service_role_access.sql` para `update_appointment_with_history`.
+
+Aplicar em local/staging e validar:
+
+```sql
+SELECT similarity(lower(unaccent('José Antônio')), lower(unaccent('jose antonio')));          -- 1
+SELECT similarity(lower(unaccent('Maria da Silva')), lower(unaccent('Mariana da Silva')));    -- anotar o valor
+SELECT similarity(lower(unaccent('Maria da Silva')), lower(unaccent('João da Silva')));       -- deve ficar < 0.85
+```
+
+Anotar os valores no PR: se "João da Silva" × "Maria da Silva" (pai/filha, mesmo sobrenome) passar de 0.6, avisar o usuário — vai gerar flag de possível duplicado em famílias.
+
+- [ ] **Step 2: Testes que falham — regra pura e telefone**
+
+`customer-matching.spec.ts`:
+
+```ts
+import { classifyCustomerMatch } from './customer-matching';
+
+describe('classifyCustomerMatch', () => {
+  it('sem candidatos → novo', () => {
+    expect(classifyCustomerMatch([])).toEqual({ kind: 'new' });
   });
 
-  it('ao comparecer sem telefone, cria cliente novo mesmo com nome repetido', async () => {
-    const appointment = new Appointment({
-      id: 'apt-2', company_id: 'comp-1', company_unit_id: 'unit-1',
-      lead_full_name: 'Maria', lead_phone: null,
-      customer_id: null, status: AppointmentStatus.SCHEDULED,
+  it.each([0.85, 0.97, 1])('score %s → reutiliza', (score) => {
+    expect(classifyCustomerMatch([{ id: 'a', score }])).toEqual({ kind: 'reuse', id: 'a' });
+  });
+
+  it.each([0.6, 0.7, 0.849])('score %s → possível duplicado', (score) => {
+    expect(classifyCustomerMatch([{ id: 'a', score }])).toEqual({
+      kind: 'possible_duplicate',
+      id: 'a',
     });
-    mockAppointmentRepo.getById.mockResolvedValue(appointment);
-    mockCompanyUserService.hasUnitAccess.mockResolvedValue(true);
-    mockCustomerRepo.create.mockResolvedValue({ id: 'cust-new' });
-    mockAppointmentRepo.updateWithHistory.mockResolvedValue(
-      new Appointment({ ...appointment, status: AppointmentStatus.ATTENDED, customer_id: 'cust-new' }),
-    );
+  });
 
-    await service.update('apt-2', { status: AppointmentStatus.ATTENDED } as any, adminUser);
+  it.each([0, 0.3, 0.599])('score %s → novo (outro membro da família)', (score) => {
+    expect(classifyCustomerMatch([{ id: 'a', score }])).toEqual({ kind: 'new' });
+  });
 
-    expect(mockCustomerRepo.findByPhones).not.toHaveBeenCalled();
-    expect(mockCustomerRepo.create).toHaveBeenCalled();
+  it('usa o melhor candidato mesmo fora de ordem', () => {
+    expect(
+      classifyCustomerMatch([
+        { id: 'pai', score: 0.2 },
+        { id: 'filha', score: 0.9 },
+      ]),
+    ).toEqual({ kind: 'reuse', id: 'filha' });
+  });
+});
+```
+
+`src/common/utils/phone.util.spec.ts`: os testes da seção "telefone" da Task 2, mais:
+
+```ts
+  it('12 dígitos começando com 55 perde o código do país', () => {
+    expect(normalizePhone('556391234567')).toBe('6391234567');
+  });
+
+  it('11 dígitos começando com 55 é DDD 55, não código do país', () => {
+    expect(normalizePhone('55991234567')).toBe('55991234567');
   });
 ```
 
-(`adminUser` = o usuário já usado no teste de comparecimento existente; reaproveitar a mesma variável/fixture.)
+- [ ] **Step 3: Testes que falham — serviço**
 
-- [ ] **Step 4:** Run `npx vitest run src/modules/appointments src/common/utils` → FAIL.
+`customer-matching.service.spec.ts`:
+
+```ts
+import { ConflictException } from '@nestjs/common';
+import { CustomerMatchingService } from './customer-matching.service';
+
+describe('CustomerMatchingService', () => {
+  let repo: any;
+  let service: CustomerMatchingService;
+  const base = {
+    companyId: 'comp-1',
+    companyUnitId: 'unit-1',
+    userId: 'u-1',
+    fullName: 'Maria da Silva',
+    phone: '63991234567',
+  };
+
+  beforeEach(() => {
+    repo = {
+      findByKommoContactId: vi.fn().mockResolvedValue(null),
+      matchByPhone: vi.fn().mockResolvedValue([]),
+      create: vi.fn().mockResolvedValue({ id: 'cust-new' }),
+      linkKommoContact: vi.fn().mockResolvedValue(undefined),
+    };
+    service = new CustomerMatchingService(repo);
+  });
+
+  it('kommo_contact_id vence tudo', async () => {
+    repo.findByKommoContactId.mockResolvedValue({ id: 'cust-k' });
+    await expect(service.resolve({ ...base, kommoContactId: 9 })).resolves.toEqual({
+      customerId: 'cust-k',
+      created: false,
+      reviewReason: null,
+    });
+    expect(repo.matchByPhone).not.toHaveBeenCalled();
+  });
+
+  it('telefone + nome parecido (>= 0.85) reutiliza e vincula o contato', async () => {
+    repo.matchByPhone.mockResolvedValue([{ id: 'cust-m', score: 0.92 }]);
+    await expect(service.resolve({ ...base, kommoContactId: 9 })).resolves.toEqual({
+      customerId: 'cust-m',
+      created: false,
+      reviewReason: null,
+    });
+    expect(repo.matchByPhone).toHaveBeenCalledWith(
+      'comp-1',
+      ['63991234567', '6391234567'],
+      'Maria da Silva',
+    );
+    expect(repo.linkKommoContact).toHaveBeenCalledWith('cust-m', 9, 'u-1');
+    expect(repo.create).not.toHaveBeenCalled();
+  });
+
+  it('mesmo telefone, outro membro da família (< 0.6) → cria sem revisão', async () => {
+    repo.matchByPhone.mockResolvedValue([{ id: 'cust-pai', score: 0.2 }]);
+    await expect(service.resolve(base)).resolves.toEqual({
+      customerId: 'cust-new',
+      created: true,
+      reviewReason: null,
+    });
+    expect(repo.create).toHaveBeenCalledWith({
+      company_id: 'comp-1',
+      company_unit_id: 'unit-1',
+      full_name: 'Maria da Silva',
+      phone: '63991234567',
+      kommo_contact_id: null,
+      needs_review: false,
+      review_reason: null,
+      created_by_user_id: 'u-1',
+      updated_by_user_id: 'u-1',
+    });
+  });
+
+  it('nome quase igual (0.6–0.85) → cria com possível duplicado', async () => {
+    repo.matchByPhone.mockResolvedValue([{ id: 'cust-x', score: 0.7 }]);
+    await expect(service.resolve(base)).resolves.toEqual({
+      customerId: 'cust-new',
+      created: true,
+      reviewReason: 'Possível duplicado de cust-x',
+    });
+    expect(repo.create).toHaveBeenCalledWith(
+      expect.objectContaining({ needs_review: true, review_reason: 'Possível duplicado de cust-x' }),
+    );
+  });
+
+  it('sem telefone → cria direto, sem buscar candidatos', async () => {
+    await service.resolve({ ...base, phone: null });
+    expect(repo.matchByPhone).not.toHaveBeenCalled();
+    expect(repo.create).toHaveBeenCalledWith(expect.objectContaining({ phone: null }));
+  });
+
+  it('corrida no kommo_contact_id: usa o cliente que venceu', async () => {
+    repo.create.mockRejectedValue(new ConflictException('x'));
+    repo.findByKommoContactId.mockResolvedValueOnce(null).mockResolvedValueOnce({ id: 'cust-race' });
+    await expect(service.resolve({ ...base, kommoContactId: 9 })).resolves.toEqual({
+      customerId: 'cust-race',
+      created: false,
+      reviewReason: null,
+    });
+  });
+
+  it('conflito sem contato Kommo propaga', async () => {
+    repo.create.mockRejectedValue(new ConflictException('x'));
+    await expect(service.resolve(base)).rejects.toBeInstanceOf(ConflictException);
+  });
+});
+```
+
+- [ ] **Step 4:** Run `npx vitest run src/common/utils src/modules/customers` → FAIL.
 
 - [ ] **Step 5: Implementar**
 
-`promoteLeadToCustomer`:
+`src/common/utils/phone.util.ts`: código da seção "telefone" da Task 2 (só remove `55` com 12–13 dígitos; nunca grava `55` + 9 dígitos sem DDD).
+
+`src/modules/customers/customer-matching.ts`:
+
+```ts
+export type CustomerCandidate = { id: string; score: number };
+
+export type CustomerMatch =
+  | { kind: 'reuse'; id: string }
+  | { kind: 'possible_duplicate'; id: string }
+  | { kind: 'new' };
+
+export const SAME_PERSON_THRESHOLD = 0.85;
+export const POSSIBLE_DUPLICATE_THRESHOLD = 0.6;
+
+export function classifyCustomerMatch(candidates: CustomerCandidate[]): CustomerMatch {
+  const best = candidates.reduce<CustomerCandidate | null>(
+    (acc, c) => (!acc || c.score > acc.score ? c : acc),
+    null,
+  );
+  if (!best) return { kind: 'new' };
+  if (best.score >= SAME_PERSON_THRESHOLD) return { kind: 'reuse', id: best.id };
+  if (best.score >= POSSIBLE_DUPLICATE_THRESHOLD) return { kind: 'possible_duplicate', id: best.id };
+  return { kind: 'new' };
+}
+```
+
+`src/modules/customers/customer-matching.service.ts`:
+
+```ts
+import { ConflictException, Injectable } from '@nestjs/common';
+import { phoneVariants } from '@/common/utils/phone.util';
+import { classifyCustomerMatch } from './customer-matching';
+import { CustomerRepository } from './repositories/customer.repository';
+
+export interface ResolveCustomerInput {
+  companyId: string;
+  companyUnitId: string;
+  userId: string;
+  fullName: string;
+  phone: string | null;
+  kommoContactId?: number | null;
+}
+
+export interface ResolvedCustomer {
+  customerId: string;
+  created: boolean;
+  reviewReason: string | null;
+}
+
+@Injectable()
+export class CustomerMatchingService {
+  constructor(private readonly repo: CustomerRepository) {}
+
+  async resolve(input: ResolveCustomerInput): Promise<ResolvedCustomer> {
+    const contactId = input.kommoContactId ?? null;
+
+    if (contactId) {
+      const linked = await this.repo.findByKommoContactId(input.companyId, contactId);
+      if (linked) return { customerId: linked.id, created: false, reviewReason: null };
+    }
+
+    const match = input.phone
+      ? classifyCustomerMatch(
+          await this.repo.matchByPhone(input.companyId, phoneVariants(input.phone), input.fullName),
+        )
+      : ({ kind: 'new' } as const);
+
+    if (match.kind === 'reuse') {
+      if (contactId) await this.repo.linkKommoContact(match.id, contactId, input.userId);
+      return { customerId: match.id, created: false, reviewReason: null };
+    }
+
+    const reviewReason =
+      match.kind === 'possible_duplicate' ? `Possível duplicado de ${match.id}` : null;
+    try {
+      const created = await this.repo.create({
+        company_id: input.companyId,
+        company_unit_id: input.companyUnitId,
+        full_name: input.fullName,
+        phone: input.phone,
+        kommo_contact_id: contactId,
+        needs_review: reviewReason !== null,
+        review_reason: reviewReason,
+        created_by_user_id: input.userId,
+        updated_by_user_id: input.userId,
+      });
+      return { customerId: created.id, created: true, reviewReason };
+    } catch (err) {
+      // O único índice único restante em customers é o do contato Kommo: outro evento venceu a corrida.
+      if (err instanceof ConflictException && contactId) {
+        const winner = await this.repo.findByKommoContactId(input.companyId, contactId);
+        if (winner) return { customerId: winner.id, created: false, reviewReason: null };
+      }
+      throw err;
+    }
+  }
+}
+```
+
+`customer.entity.ts`: `phone: string | null;` e adicionar `kommo_contact_id: number | null; needs_review: boolean; review_reason: string | null;`.
+
+`customer.repository.ts`:
+- remover `getByIdentity`;
+- em `create`, remover `kommo_contact_id` do payload quando for `null`/`undefined` (a coluna só existe depois da `0010`); trocar a mensagem de conflito de `create` e `update` para `'Este contato do Kommo já está vinculado a outro cliente'`;
+- adicionar:
+
+```ts
+  async matchByPhone(
+    companyId: string,
+    phones: string[],
+    fullName: string,
+  ): Promise<{ id: string; score: number }[]> {
+    const { data, error } = await this.db.rpc('match_customers_by_phone', {
+      p_company_id: companyId,
+      p_phones: phones,
+      p_full_name: fullName,
+    });
+    if (error) throw error;
+    return (data || []).map((row: any) => ({ id: row.id, score: Number(row.score) }));
+  }
+
+  async findByKommoContactId(companyId: string, contactId: number): Promise<Customer | null> {
+    const { data, error } = await this.db
+      .from(TABLE)
+      .select('*')
+      .eq('company_id', companyId)
+      .eq('kommo_contact_id', contactId)
+      .is('deleted_at', null)
+      .maybeSingle();
+    if (error) throw error;
+    return data ? new Customer(data) : null;
+  }
+
+  async linkKommoContact(customerId: string, contactId: number, userId: string): Promise<void> {
+    const { error } = await this.db
+      .from(TABLE)
+      .update({ kommo_contact_id: contactId, updated_by_user_id: userId })
+      .eq('id', customerId)
+      .is('kommo_contact_id', null);
+    if (error && error.code !== UNIQUE_VIOLATION) throw error;
+  }
+```
+
+`customers.module.ts`: adicionar `CustomerMatchingService` em `providers` e `exports`.
+
+`appointments.service.ts`: importar `normalizePhone` de `@/common/utils/phone.util` e `CustomerMatchingService`; injetá-lo no construtor como `private readonly customerMatching: CustomerMatchingService` (último parâmetro); trocar `promoteLeadToCustomer` por:
 
 ```ts
   private async promoteLeadToCustomer(
     appointment: Appointment,
     currentUser: User,
   ): Promise<string> {
-    const customerRepo = this.customersService.getCustomerRepository();
-    const phone = normalizePhone(appointment.lead_phone);
-    const variants = phone ? phoneVariants(phone) : [];
-
-    if (phone) {
-      const existing = await customerRepo.findByPhones(appointment.company_id, variants);
-      if (existing) return existing.id;
-    }
-
-    try {
-      const created = await customerRepo.create({
-        company_id: appointment.company_id,
-        company_unit_id: appointment.company_unit_id,
-        full_name: appointment.lead_full_name,
-        phone,
-        created_by_user_id: currentUser.id,
-        updated_by_user_id: currentUser.id,
-      });
-      return created.id;
-    } catch (err: any) {
-      if (err instanceof ConflictException && phone) {
-        // Corrida: outro request criou o mesmo telefone entre a busca e o insert.
-        const concurrent = await customerRepo.findByPhones(appointment.company_id, variants);
-        if (concurrent) return concurrent.id;
-      }
-      throw err;
-    }
+    const { customerId } = await this.customerMatching.resolve({
+      companyId: appointment.company_id,
+      companyUnitId: appointment.company_unit_id,
+      userId: currentUser.id,
+      fullName: appointment.lead_full_name,
+      phone: normalizePhone(appointment.lead_phone),
+    });
+    return customerId;
   }
 ```
 
-Em `customer.repository.ts`: remover `getByIdentity`, adicionar `findByPhones` (código da Task 4) e trocar as duas mensagens de `ConflictException` por:
+Remover imports que ficarem sem uso (ex.: `ConflictException`, se não for mais usado no arquivo).
 
-```ts
-          `Já existe um cliente com o telefone '${data.phone}' nesta empresa`,
-```
+- [ ] **Step 6: Ajustar `appointments.service.spec.ts`** — criar `mockCustomerMatching = { resolve: vi.fn().mockResolvedValue({ customerId: 'new-cust-1', created: true, reviewReason: null }) }`, passá-lo como último argumento do construtor e remover do mock de cliente o que só servia ao `promoteLeadToCustomer`. No teste de comparecimento existente, trocar as asserções sobre `getByIdentity`/`create` por uma asserção de `mockCustomerMatching.resolve` com `companyId`, `companyUnitId`, `userId`, `fullName` e `phone` (o `lead_phone` do teste já normalizado). Duplicar esse teste com `lead_phone: '+55 63 9123-4567'`, esperando `phone: '6391234567'`.
 
-- [ ] **Step 6:** Run `npx vitest run && npx tsc --noEmit` → PASS. Se `customers.service.spec.ts` esperava a mensagem antiga, atualizar só a string.
+- [ ] **Step 7:** Run `npx vitest run && npx tsc --noEmit` → PASS.
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 8: Commit**
 
 ```bash
-git add db/migrations/0009_customers_unique_phone.sql src/common/utils/phone.util.ts src/common/utils/phone.util.spec.ts src/modules/customers src/modules/appointments
-git commit -m "fix(customers): identificar cliente pelo telefone em vez do nome"
+git add db/migrations/0009_customer_matching.sql src/common/utils/phone.util.ts src/common/utils/phone.util.spec.ts src/modules/customers src/modules/appointments
+git commit -m "feat(customers): identificar cliente por telefone + similaridade de nome"
 ```
 
 ---
@@ -295,9 +594,8 @@ CREATE INDEX idx_kommo_events_claimable
 ON kommo_events (next_attempt_at) WHERE status IN ('pending', 'processing');
 CREATE INDEX idx_kommo_events_lead ON kommo_events (company_id, kommo_lead_id);
 
-ALTER TABLE customers
-    ADD COLUMN kommo_contact_id BIGINT,
-    ADD COLUMN needs_review BOOLEAN NOT NULL DEFAULT FALSE;
+-- needs_review/review_reason de customers já vêm da 0009.
+ALTER TABLE customers ADD COLUMN kommo_contact_id BIGINT;
 
 CREATE UNIQUE INDEX uq_customers_company_kommo_contact
 ON customers (company_id, kommo_contact_id)
@@ -922,7 +1220,7 @@ Repositórios são wrappers finos sobre PostgREST; o projeto não tem testes de 
 - `KommoIntegration`, `KommoEvent`, `KommoEventStatus` (abaixo).
 - `KommoIntegrationRepository`: `findActiveByTokenHash(hash)`, `findById(id)`, `findActiveByCompany(companyId)`, `create(data)`, `update(id, data)`.
 - `KommoEventRepository`: `enqueue(rows)`, `claim(limit, leaseSeconds)`, `markDone(id, appointmentId)`, `markFailed(id, message)`, `scheduleRetry(id, message, nextAttemptAt: Date)`.
-- `CustomerRepository`: `findByKommoContactId(companyId, contactId)`, `findByPhones(companyId, phones)`, `createForKommo(data): Promise<Customer | null>` (null = corrida em índice único de telefone/contato), `linkKommoContact(customerId, contactId, userId)`.
+- `CustomerRepository`: nada novo (Task 0B).
 - `AppointmentRepository.upsertFromKommo(input: KommoAppointmentInput): Promise<Appointment>`.
 
 - [ ] **Step 1: Entidades**
@@ -1118,51 +1416,7 @@ export class KommoEventRepository {
 }
 ```
 
-- [ ] **Step 4: Cliente — entidade e repositório**
-
-Em `customer.entity.ts`, trocar `phone: string;` por `phone: string | null;` e adicionar:
-
-```ts
-  kommo_contact_id: number | null;
-  needs_review: boolean;
-```
-
-Em `customer.repository.ts`, adicionar os métodos (usando `.from`):
-
-```ts
-  async findByKommoContactId(companyId: string, contactId: number): Promise<Customer | null> {
-    const { data, error } = await this.db
-      .from(TABLE)
-      .select('*')
-      .eq('company_id', companyId)
-      .eq('kommo_contact_id', contactId)
-      .is('deleted_at', null)
-      .maybeSingle();
-    if (error) throw error;
-    return data ? new Customer(data) : null;
-  }
-
-  // findByPhones já foi adicionado na Task 0B.
-
-  // Corrida em telefone ou kommo_contact_id (índices únicos) devolve null em vez de lançar.
-  async createForKommo(data: Partial<Customer>): Promise<Customer | null> {
-    const { data: rows, error } = await this.db.from(TABLE).insert(data).select();
-    if (error) {
-      if (error.code === UNIQUE_VIOLATION) return null;
-      throw error;
-    }
-    return new Customer(rows[0]);
-  }
-
-  async linkKommoContact(customerId: string, contactId: number, userId: string): Promise<void> {
-    const { error } = await this.db
-      .from(TABLE)
-      .update({ kommo_contact_id: contactId, updated_by_user_id: userId })
-      .eq('id', customerId)
-      .is('kommo_contact_id', null);
-    if (error && error.code !== UNIQUE_VIOLATION) throw error;
-  }
-```
+- [ ] **Step 4: Cliente** — entidade e repositório já foram ajustados na Task 0B (`matchByPhone`, `findByKommoContactId`, `linkKommoContact`). Agora que a `0010` criou a coluna, em `customer.repository.ts` o `create` pode enviar `kommo_contact_id` sempre (remover o filtro de `null` adicionado na Task 0B só se ele atrapalhar; mantê-lo é inofensivo).
 
 - [ ] **Step 5: Agendamento — entidade e repositório**
 
@@ -1638,7 +1892,7 @@ git commit -m "feat(kommo): cliente da API v4 para lead, contato e nota"
 - Modify: `src/modules/kommo/kommo.module.ts`
 
 **Interfaces:**
-- Consumes: `KommoIntegrationRepository.findById`, `KommoCryptoService.decrypt`, `KommoClient`, `fieldValue`, `parseSchedule`, `normalizePhone`, `phoneVariants`, `CustomerRepository.{findByKommoContactId, findByPhones, createForKommo, linkKommoContact}`, `AppointmentRepository.upsertFromKommo`, `formatTitleCase` (`@/common/utils/text.util`).
+- Consumes: `KommoIntegrationRepository.findById`, `KommoCryptoService.decrypt`, `KommoClient`, `fieldValue`, `parseSchedule`, `normalizePhone`, `CustomerMatchingService.resolve` (Task 0B), `AppointmentRepository.upsertFromKommo`, `formatTitleCase` (`@/common/utils/text.util`).
 - Produces: `KommoPermanentError`, `KommoClientFactory`, `KOMMO_CLIENT_FACTORY`, `KommoEventProcessorService.process(event: KommoEvent): Promise<string>` (id do agendamento). Erro permanente → `KommoPermanentError`; erros do Kommo propagam como `KommoApiError` para o worker decidir.
 
 Regras, em ordem:
@@ -1646,7 +1900,7 @@ Regras, em ordem:
 2. `getLead`. Contato principal = `is_main`, senão o primeiro; sem contato → segue só com o nome do lead e sem telefone.
 3. `parseSchedule`; `ok:false` → nota no lead com o motivo e `KommoPermanentError(reason)`.
 4. Telefone do contato via `phone_field_id` → `normalizePhone`. Nome = `formatTitleCase(contact.name || lead.name)`; vazio → `'Sem Nome'` + revisão.
-5. Cliente: `kommo_contact_id` → `phoneVariants` (e grava o vínculo) → `createForKommo` (com `needs_review` se sem telefone) → `null` = corrida: busca de novo (contato, depois telefone); sem vencedor → erro comum (retentável).
+5. Cliente: `CustomerMatchingService.resolve({ ..., kommoContactId: contact?.id ?? null })`. Se devolver `reviewReason` (possível duplicado), ele entra nos motivos de revisão do agendamento.
 6. Motivos de revisão em `review_reason`, separados por `; `.
 7. `notes` = `Indicação: <valor>` ou `null`.
 8. `upsertFromKommo`, depois nota de sucesso. Falha na nota só é logada (agendamento já gravado; não reprocessar).
@@ -1714,10 +1968,7 @@ describe('KommoEventProcessorService', () => {
       addLeadNote: vi.fn().mockResolvedValue(undefined),
     };
     customers = {
-      findByKommoContactId: vi.fn().mockResolvedValue(null),
-      findByPhones: vi.fn().mockResolvedValue(null),
-      createForKommo: vi.fn().mockResolvedValue({ id: 'cust-new' }),
-      linkKommoContact: vi.fn().mockResolvedValue(undefined),
+      resolve: vi.fn().mockResolvedValue({ customerId: 'cust-new', created: true, reviewReason: null }),
     };
     appointments = { upsertFromKommo: vi.fn().mockResolvedValue({ id: 'appt-1' }) };
     service = new KommoEventProcessorService(
@@ -1729,17 +1980,15 @@ describe('KommoEventProcessorService', () => {
     );
   });
 
-  it('caminho feliz: cria cliente, faz upsert e escreve nota', async () => {
+  it('caminho feliz: resolve cliente, faz upsert e escreve nota', async () => {
     await expect(service.process(event)).resolves.toBe('appt-1');
-    expect(customers.findByPhones).toHaveBeenCalledWith('comp-1', ['63991234567', '6391234567']);
-    expect(customers.createForKommo).toHaveBeenCalledWith({
-      company_id: 'comp-1',
-      company_unit_id: 'unit-1',
-      full_name: 'Maria da Silva',
+    expect(customers.resolve).toHaveBeenCalledWith({
+      companyId: 'comp-1',
+      companyUnitId: 'unit-1',
+      userId: 'svc-1',
+      fullName: 'Maria da Silva',
       phone: '63991234567',
-      kommo_contact_id: 900,
-      needs_review: false,
-      created_by_user_id: 'svc-1',
+      kommoContactId: 900,
     });
     expect(appointments.upsertFromKommo).toHaveBeenCalledWith({
       companyId: 'comp-1',
@@ -1761,20 +2010,16 @@ describe('KommoEventProcessorService', () => {
     );
   });
 
-  it('cliente achado por kommo_contact_id não busca telefone', async () => {
-    customers.findByKommoContactId.mockResolvedValue({ id: 'cust-old' });
+  it('possível duplicado vira motivo de revisão do agendamento', async () => {
+    customers.resolve.mockResolvedValue({
+      customerId: 'cust-new',
+      created: true,
+      reviewReason: 'Possível duplicado de cust-x',
+    });
     await service.process(event);
-    expect(customers.findByPhones).not.toHaveBeenCalled();
     expect(appointments.upsertFromKommo).toHaveBeenCalledWith(
-      expect.objectContaining({ customerId: 'cust-old' }),
+      expect.objectContaining({ needsReview: true, reviewReason: 'Possível duplicado de cust-x' }),
     );
-  });
-
-  it('cliente achado por telefone recebe o vínculo do contato', async () => {
-    customers.findByPhones.mockResolvedValue({ id: 'cust-phone' });
-    await service.process(event);
-    expect(customers.linkKommoContact).toHaveBeenCalledWith('cust-phone', 900, 'svc-1');
-    expect(customers.createForKommo).not.toHaveBeenCalled();
   });
 
   it('horário inválido grava 00:00 com revisão', async () => {
@@ -1794,49 +2039,26 @@ describe('KommoEventProcessorService', () => {
     );
   });
 
-  it('telefone inválido cria cliente com phone null e revisão', async () => {
+  it('telefone inválido segue com phone null e revisão', async () => {
     client.getContact.mockResolvedValue({
       id: 900,
       name: 'Maria',
       custom_fields_values: [{ field_id: 268220, values: [{ value: '123' }] }],
     });
     await service.process(event);
-    expect(customers.findByPhones).not.toHaveBeenCalled();
-    expect(customers.createForKommo).toHaveBeenCalledWith(
-      expect.objectContaining({ phone: null, needs_review: true }),
-    );
+    expect(customers.resolve).toHaveBeenCalledWith(expect.objectContaining({ phone: null }));
     expect(appointments.upsertFromKommo).toHaveBeenCalledWith(
       expect.objectContaining({ leadPhone: null, reviewReason: 'Telefone inválido ou ausente' }),
     );
-  });
-
-  it('mesmo nome com outro telefone cria cliente normalmente, sem revisão', async () => {
-    await service.process(event);
-    expect(customers.createForKommo).toHaveBeenCalled();
-    expect(appointments.upsertFromKommo).toHaveBeenCalledWith(
-      expect.objectContaining({ customerId: 'cust-new', needsReview: false, reviewReason: null }),
-    );
-  });
-
-  it('corrida no insert do cliente: busca de novo e usa o que venceu', async () => {
-    customers.createForKommo.mockResolvedValue(null);
-    customers.findByPhones.mockResolvedValueOnce(null).mockResolvedValueOnce({ id: 'cust-race' });
-    await service.process(event);
-    expect(appointments.upsertFromKommo).toHaveBeenCalledWith(
-      expect.objectContaining({ customerId: 'cust-race', needsReview: false }),
-    );
-  });
-
-  it('corrida sem vencedor visível → erro retentável', async () => {
-    customers.createForKommo.mockResolvedValue(null);
-    await expect(service.process(event)).rejects.not.toBeInstanceOf(KommoPermanentError);
-    expect(appointments.upsertFromKommo).not.toHaveBeenCalled();
   });
 
   it('lead sem contato usa o nome do lead', async () => {
     client.getLead.mockResolvedValue({ ...lead(), _embedded: { contacts: [] } });
     await service.process(event);
     expect(client.getContact).not.toHaveBeenCalled();
+    expect(customers.resolve).toHaveBeenCalledWith(
+      expect.objectContaining({ fullName: 'Lead 55', phone: null, kommoContactId: null }),
+    );
     expect(appointments.upsertFromKommo).toHaveBeenCalledWith(
       expect.objectContaining({ leadFullName: 'Lead 55', leadPhone: null }),
     );
@@ -1877,13 +2099,12 @@ describe('KommoEventProcessorService', () => {
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { formatTitleCase } from '@/common/utils/text.util';
 import { AppointmentRepository } from '@/modules/appointments/repositories/appointment.repository';
-import { CustomerRepository } from '@/modules/customers/repositories/customer.repository';
+import { CustomerMatchingService } from '@/modules/customers/customer-matching.service';
 import { KommoEvent } from './entities/kommo-event.entity';
-import { KommoIntegration } from './entities/kommo-integration.entity';
-import { KommoClient, KommoContact, fieldValue } from './kommo-client';
+import { KommoClient, fieldValue } from './kommo-client';
 import { KommoCryptoService } from './kommo-crypto.service';
 import { KommoIntegrationRepository } from './repositories/kommo-integration.repository';
-import { normalizePhone, phoneVariants } from '@/common/utils/phone.util';
+import { normalizePhone } from '@/common/utils/phone.util';
 import { parseSchedule } from './utils/kommo-schedule.util';
 
 export class KommoPermanentError extends Error {}
@@ -1904,7 +2125,7 @@ export class KommoEventProcessorService {
   constructor(
     private readonly integrations: KommoIntegrationRepository,
     private readonly crypto: KommoCryptoService,
-    private readonly customers: CustomerRepository,
+    private readonly customers: CustomerMatchingService,
     private readonly appointments: AppointmentRepository,
     @Inject(KOMMO_CLIENT_FACTORY) private readonly clientFactory: KommoClientFactory,
   ) {}
@@ -1955,7 +2176,15 @@ export class KommoEventProcessorService {
       reasons.push(REVIEW.name);
     }
 
-    const customerId = await this.resolveCustomer(integration, contact, fullName, phone, reasons);
+    const resolved = await this.customers.resolve({
+      companyId: integration.company_id,
+      companyUnitId: integration.company_unit_id,
+      userId: integration.service_user_id,
+      fullName,
+      phone,
+      kommoContactId: contact?.id ?? null,
+    });
+    if (resolved.reviewReason) reasons.push(resolved.reviewReason);
 
     const referral = fieldValue(lead.custom_fields_values, integration.referral_field_id);
     const appointment = await this.appointments.upsertFromKommo({
@@ -1963,7 +2192,7 @@ export class KommoEventProcessorService {
       companyUnitId: integration.company_unit_id,
       userId: integration.service_user_id,
       kommoLeadId: leadId,
-      customerId,
+      customerId: resolved.customerId,
       leadFullName: fullName,
       leadPhone: phone,
       scheduledAt: schedule.scheduledAt,
@@ -1979,48 +2208,6 @@ export class KommoEventProcessorService {
       this.successNote(schedule.scheduledAt, schedule.timeUnknown, reasons),
     );
     return appointment.id;
-  }
-
-  private async resolveCustomer(
-    integration: KommoIntegration,
-    contact: KommoContact | null,
-    fullName: string,
-    phone: string | null,
-    reasons: string[],
-  ): Promise<string> {
-    const companyId = integration.company_id;
-    const userId = integration.service_user_id;
-
-    if (contact) {
-      const linked = await this.customers.findByKommoContactId(companyId, contact.id);
-      if (linked) return linked.id;
-    }
-
-    if (phone) {
-      const byPhone = await this.customers.findByPhones(companyId, phoneVariants(phone));
-      if (byPhone) {
-        if (contact) await this.customers.linkKommoContact(byPhone.id, contact.id, userId);
-        return byPhone.id;
-      }
-    }
-
-    const created = await this.customers.createForKommo({
-      company_id: companyId,
-      company_unit_id: integration.company_unit_id,
-      full_name: fullName,
-      phone,
-      kommo_contact_id: contact?.id ?? null,
-      needs_review: !phone,
-      created_by_user_id: userId,
-    });
-    if (created) return created.id;
-
-    // Corrida: outro evento criou o mesmo telefone/contato entre a busca e o insert.
-    const winner =
-      (contact && (await this.customers.findByKommoContactId(companyId, contact.id))) ||
-      (phone && (await this.customers.findByPhones(companyId, phoneVariants(phone))));
-    if (winner) return winner.id;
-    throw new Error('Conflito ao criar cliente; será retentado');
   }
 
   private successNote(scheduledAt: string, timeUnknown: boolean, reasons: string[]): string {
@@ -2041,7 +2228,7 @@ export class KommoEventProcessorService {
 }
 ```
 
-Em `kommo.module.ts`: adicionar `imports: [CustomersModule, AppointmentsModule]` (ambos já exportam os repositórios) e, nos providers:
+Em `kommo.module.ts`: adicionar `imports: [CustomersModule, AppointmentsModule]` (exportam `CustomerMatchingService` e `AppointmentRepository`) e, nos providers:
 
 ```ts
     KommoEventProcessorService,

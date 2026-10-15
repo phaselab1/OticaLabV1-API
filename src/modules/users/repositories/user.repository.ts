@@ -21,7 +21,7 @@ export class UserRepository {
     role: string;
   }): Promise<User> {
     const { data: rows, error } = await this.db
-      .table(USERS_TABLE)
+      .from(USERS_TABLE)
       .insert(data)
       .select();
 
@@ -38,7 +38,7 @@ export class UserRepository {
 
   async getAll(page: number, pageSize: number): Promise<[User[], number]> {
     const { data, count, error } = await this.db
-      .table(USERS_TABLE)
+      .from(USERS_TABLE)
       .select('*', { count: 'exact' })
       .is('deleted_at', null)
       .order('created_at', { ascending: false })
@@ -50,7 +50,7 @@ export class UserRepository {
 
   async getAccessibleCompanyIds(userId: string): Promise<string[]> {
     const { data, error } = await this.db
-      .table(COMPANY_USERS_TABLE)
+      .from(COMPANY_USERS_TABLE)
       .select('company_id')
       .eq('user_id', userId)
       .is('deleted_at', null);
@@ -69,7 +69,7 @@ export class UserRepository {
     const visibleUserIds = new Set<string>([currentUserId]);
     if (companyIds.length > 0) {
       const { data: links, error: linksError } = await this.db
-        .table(COMPANY_USERS_TABLE)
+        .from(COMPANY_USERS_TABLE)
         .select('user_id')
         .in('company_id', companyIds)
         .is('deleted_at', null);
@@ -79,7 +79,7 @@ export class UserRepository {
     }
 
     const { data, count, error } = await this.db
-      .table(USERS_TABLE)
+      .from(USERS_TABLE)
       .select('*', { count: 'exact' })
       .is('deleted_at', null)
       .in('id', Array.from(visibleUserIds))
@@ -102,7 +102,7 @@ export class UserRepository {
 
   async getById(userId: string): Promise<User | null> {
     const { data, error } = await this.db
-      .table(USERS_TABLE)
+      .from(USERS_TABLE)
       .select('*')
       .eq('id', userId)
       .is('deleted_at', null)
@@ -114,7 +114,7 @@ export class UserRepository {
 
   async getByEmail(email: string): Promise<User | null> {
     const { data, error } = await this.db
-      .table(USERS_TABLE)
+      .from(USERS_TABLE)
       .select('*')
       .eq('email', email)
       .is('deleted_at', null)
@@ -126,7 +126,7 @@ export class UserRepository {
 
   async update(userId: string, data: Partial<User>): Promise<User | null> {
     const { data: rows, error } = await this.db
-      .table(USERS_TABLE)
+      .from(USERS_TABLE)
       .update(data)
       .eq('id', userId)
       .is('deleted_at', null)
@@ -145,7 +145,7 @@ export class UserRepository {
 
   async softDelete(userId: string): Promise<boolean> {
     const { data, error } = await this.db
-      .table(USERS_TABLE)
+      .from(USERS_TABLE)
       .update({ deleted_at: new Date().toISOString() })
       .eq('id', userId)
       .is('deleted_at', null)

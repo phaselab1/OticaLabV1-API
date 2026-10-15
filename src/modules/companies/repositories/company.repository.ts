@@ -21,7 +21,7 @@ export class CompanyRepository {
 
   async create(data: Partial<Company>): Promise<Company> {
     const { data: rows, error } = await this.db
-      .table(COMPANIES_TABLE)
+      .from(COMPANIES_TABLE)
       .insert(data)
       .select();
 
@@ -42,7 +42,7 @@ export class CompanyRepository {
     companyIds?: string[],
   ): Promise<[Company[], number]> {
     let query = this.db
-      .table(COMPANIES_TABLE)
+      .from(COMPANIES_TABLE)
       .select('*', { count: 'exact' })
       .is('deleted_at', null);
 
@@ -60,7 +60,7 @@ export class CompanyRepository {
 
   async getById(id: string): Promise<Company | null> {
     const { data, error } = await this.db
-      .table(COMPANIES_TABLE)
+      .from(COMPANIES_TABLE)
       .select('*')
       .eq('id', id)
       .is('deleted_at', null)
@@ -72,7 +72,7 @@ export class CompanyRepository {
 
   async update(id: string, data: Partial<Company>): Promise<Company | null> {
     const { data: rows, error } = await this.db
-      .table(COMPANIES_TABLE)
+      .from(COMPANIES_TABLE)
       .update(data)
       .eq('id', id)
       .is('deleted_at', null)
@@ -91,7 +91,7 @@ export class CompanyRepository {
 
   async softDelete(id: string): Promise<boolean> {
     const { data, error } = await this.db
-      .table(COMPANIES_TABLE)
+      .from(COMPANIES_TABLE)
       .update({ deleted_at: new Date().toISOString() })
       .eq('id', id)
       .is('deleted_at', null)
@@ -112,7 +112,7 @@ export class CompanyUnitRepository {
 
   async create(data: Partial<CompanyUnit>): Promise<CompanyUnit> {
     const { data: rows, error } = await this.db
-      .table(COMPANY_UNITS_TABLE)
+      .from(COMPANY_UNITS_TABLE)
       .insert(data)
       .select();
 
@@ -133,7 +133,7 @@ export class CompanyUnitRepository {
     pageSize: number,
   ): Promise<[CompanyUnit[], number]> {
     const { data, count, error } = await this.db
-      .table(COMPANY_UNITS_TABLE)
+      .from(COMPANY_UNITS_TABLE)
       .select('*', { count: 'exact' })
       .eq('company_id', companyId)
       .is('deleted_at', null)
@@ -146,7 +146,7 @@ export class CompanyUnitRepository {
 
   async getById(id: string): Promise<CompanyUnit | null> {
     const { data, error } = await this.db
-      .table(COMPANY_UNITS_TABLE)
+      .from(COMPANY_UNITS_TABLE)
       .select('*')
       .eq('id', id)
       .is('deleted_at', null)
@@ -161,7 +161,7 @@ export class CompanyUnitRepository {
     data: Partial<CompanyUnit>,
   ): Promise<CompanyUnit | null> {
     const { data: rows, error } = await this.db
-      .table(COMPANY_UNITS_TABLE)
+      .from(COMPANY_UNITS_TABLE)
       .update(data)
       .eq('id', id)
       .is('deleted_at', null)
@@ -180,7 +180,7 @@ export class CompanyUnitRepository {
 
   async softDelete(id: string): Promise<boolean> {
     const { data, error } = await this.db
-      .table(COMPANY_UNITS_TABLE)
+      .from(COMPANY_UNITS_TABLE)
       .update({ deleted_at: new Date().toISOString() })
       .eq('id', id)
       .is('deleted_at', null)
@@ -201,7 +201,7 @@ export class CompanyUserRepository {
 
   async create(data: Partial<CompanyUserLink>): Promise<CompanyUserLink> {
     const { data: rows, error } = await this.db
-      .table(COMPANY_USERS_TABLE)
+      .from(COMPANY_USERS_TABLE)
       .insert(data)
       .select();
 
@@ -222,7 +222,7 @@ export class CompanyUserRepository {
     pageSize: number,
   ): Promise<[CompanyUserLink[], number]> {
     const { data, count, error } = await this.db
-      .table(COMPANY_USERS_TABLE)
+      .from(COMPANY_USERS_TABLE)
       .select('*', { count: 'exact' })
       .eq('company_id', companyId)
       .is('deleted_at', null)
@@ -235,7 +235,7 @@ export class CompanyUserRepository {
 
   async getAllForUser(userId: string): Promise<CompanyUserLink[]> {
     const { data, error } = await this.db
-      .table(COMPANY_USERS_TABLE)
+      .from(COMPANY_USERS_TABLE)
       .select('*')
       .eq('user_id', userId)
       .is('deleted_at', null);
@@ -246,7 +246,7 @@ export class CompanyUserRepository {
 
   async getById(id: string): Promise<CompanyUserLink | null> {
     const { data, error } = await this.db
-      .table(COMPANY_USERS_TABLE)
+      .from(COMPANY_USERS_TABLE)
       .select('*')
       .eq('id', id)
       .is('deleted_at', null)
@@ -258,7 +258,7 @@ export class CompanyUserRepository {
 
   async softDelete(id: string): Promise<boolean> {
     const { data, error } = await this.db
-      .table(COMPANY_USERS_TABLE)
+      .from(COMPANY_USERS_TABLE)
       .update({ deleted_at: new Date().toISOString() })
       .eq('id', id)
       .is('deleted_at', null)

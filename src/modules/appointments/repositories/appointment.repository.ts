@@ -22,7 +22,7 @@ export class AppointmentRepository {
 
   async create(data: Partial<Appointment>): Promise<Appointment> {
     const { data: rows, error } = await this.db
-      .table(TABLE)
+      .from(TABLE)
       .insert(data)
       .select();
 
@@ -49,7 +49,7 @@ export class AppointmentRepository {
     status?: AppointmentStatus | null,
   ): Promise<[Appointment[], number]> {
     let query = this.db
-      .table(TABLE)
+      .from(TABLE)
       .select('*', { count: 'exact' })
       .is('deleted_at', null);
 
@@ -68,7 +68,7 @@ export class AppointmentRepository {
 
   async getById(appointmentId: string): Promise<Appointment | null> {
     const { data, error } = await this.db
-      .table(TABLE)
+      .from(TABLE)
       .select('*')
       .eq('id', appointmentId)
       .is('deleted_at', null)
@@ -137,7 +137,7 @@ export class AppointmentRepository {
     }
 
     const { data, error } = await this.db
-      .table(TABLE)
+      .from(TABLE)
       .update(updateData)
       .eq('id', appointmentId)
       .is('deleted_at', null)
@@ -150,7 +150,7 @@ export class AppointmentRepository {
   async softDelete(appointmentId: string): Promise<boolean> {
     const nowIso = new Date().toISOString();
     const { data, error } = await this.db
-      .table(TABLE)
+      .from(TABLE)
       .update({ deleted_at: nowIso })
       .eq('id', appointmentId)
       .is('deleted_at', null)
@@ -159,7 +159,7 @@ export class AppointmentRepository {
     if (error) {
       if (String(error.message || '').includes('is deactivated')) {
         const { data: retryData, error: retryError } = await this.db
-          .table(TABLE)
+          .from(TABLE)
           .update({ deleted_at: nowIso, customer_id: null })
           .eq('id', appointmentId)
           .is('deleted_at', null)
@@ -188,7 +188,7 @@ export class AppointmentHistoryRepository {
     pageSize: number,
   ): Promise<[AppointmentHistoryEntry[], number]> {
     const { data, count, error } = await this.db
-      .table(HISTORY_TABLE)
+      .from(HISTORY_TABLE)
       .select('*', { count: 'exact' })
       .eq('appointment_id', appointmentId)
       .order('changed_at', { ascending: false })

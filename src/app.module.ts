@@ -7,6 +7,7 @@ import { DatabaseModule } from './core/database/database.module';
 import { SecurityModule } from './core/security/security.module';
 import { HttpLoggerMiddleware } from './common/middlewares/http-logger.middleware';
 import { AppointmentsModule } from './modules/appointments/appointments.module';
+import { KommoModule } from './modules/kommo/kommo.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { CompaniesModule } from './modules/companies/companies.module';
 import { CustomersModule } from './modules/customers/customers.module';
@@ -35,6 +36,7 @@ import { UsersModule } from './modules/users/users.module';
     CompaniesModule,
     CustomersModule,
     AppointmentsModule,
+    KommoModule,
   ],
   providers: [
     {

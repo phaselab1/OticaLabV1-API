@@ -7,6 +7,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { Response, Request } from 'express';
+import { redactSecrets } from '../utils/redact.util';
 
 export const INVALID_TEXT_REPRESENTATION = '22P02';
 export const FOREIGN_KEY_VIOLATION = '23503';
@@ -66,7 +67,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
     }
 
     this.logger.error(
-      `Unhandled error on ${request.method} ${request.url}`,
+      `Unhandled error on ${request.method} ${redactSecrets(request.url)}`,
       exception?.stack || exception,
     );
 

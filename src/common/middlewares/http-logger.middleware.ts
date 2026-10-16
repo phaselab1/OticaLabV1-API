@@ -1,5 +1,6 @@
 import { Injectable, NestMiddleware, Logger } from '@nestjs/common';
 import { Request, Response, NextFunction } from 'express';
+import { redactSecrets } from '../utils/redact.util';
 
 @Injectable()
 export class HttpLoggerMiddleware implements NestMiddleware {
@@ -13,7 +14,7 @@ export class HttpLoggerMiddleware implements NestMiddleware {
     res.on('finish', () => {
       const { statusCode } = res;
       const duration = Date.now() - startTime;
-      const message = `${method} ${originalUrl} ${statusCode} - ${duration}ms [IP: ${ip}] [${userAgent}]`;
+      const message = `${method} ${redactSecrets(originalUrl)} ${statusCode} - ${duration}ms [IP: ${ip}] [${userAgent}]`;
 
       if (statusCode >= 500) {
         this.logger.error(message);

@@ -47,3 +47,12 @@ describe('parseSchedule', () => {
     });
   });
 });
+
+describe('parseSchedule (timestamp fora do intervalo)', () => {
+  it.each([1e13, 1760000000000])('timestamp %s → erro', (date) => {
+    expect(parseSchedule(date, '10:00', TZ)).toEqual({
+      ok: false,
+      reason: 'Data do agendamento vazia ou inválida',
+    });
+  });
+});

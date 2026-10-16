@@ -37,3 +37,17 @@ describe('extractLeadIds', () => {
     expect(extractLeadIds(body, STAGE)).toEqual([]);
   });
 });
+
+describe('extractLeadIds (itens inválidos)', () => {
+  it.each([
+    { leads: { status: [null] } },
+    { leads: { add: ['x'] } },
+  ])('payload %j → []', (body) => {
+    expect(extractLeadIds(body, STAGE)).toEqual([]);
+  });
+
+  it('item válido misturado com inválido retorna só o válido', () => {
+    const body = { leads: { status: [null, 'x', { id: '777', status_id: String(STAGE) }] } };
+    expect(extractLeadIds(body, STAGE)).toEqual([777]);
+  });
+});

@@ -35,6 +35,10 @@ export function parseSchedule(
   }
 
   const instant = new Date(seconds * 1000);
+  const year = instant.getUTCFullYear();
+  if (Number.isNaN(instant.getTime()) || year < 2000 || year > 2100) {
+    return { ok: false, reason: 'Data do agendamento vazia ou inválida' };
+  }
   // Campo data às vezes vem como 00:00Z, que cai no dia anterior em UTC-3.
   const isUtcMidnight = instant.getUTCHours() === 0 && instant.getUTCMinutes() === 0;
   const day = isUtcMidnight

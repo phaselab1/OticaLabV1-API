@@ -5,9 +5,12 @@ function toLeadId(value: unknown): number | null {
 
 // O parser urlencoded pode gerar {"0": {...}} em vez de array.
 function asArray(value: unknown): Record<string, any>[] {
-  if (Array.isArray(value)) return value;
-  if (value && typeof value === 'object') return Object.values(value);
-  return [];
+  const items = Array.isArray(value)
+    ? value
+    : value && typeof value === 'object'
+      ? Object.values(value)
+      : [];
+  return items.filter((item): item is Record<string, any> => !!item && typeof item === 'object');
 }
 
 export function extractLeadIds(body: unknown, scheduledStatusId: number): number[] {

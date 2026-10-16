@@ -58,7 +58,9 @@ export class KommoEventRepository {
   }
 
   private async patch(id: string, data: Partial<KommoEvent>): Promise<void> {
-    const { error } = await this.db.from(TABLE).update(data).eq('id', id);
+    const { error } = await this.db.from(TABLE).update(data)
+      .eq('id', id)
+      .eq('status', KommoEventStatus.PROCESSING);
     if (error) throw error;
   }
 }

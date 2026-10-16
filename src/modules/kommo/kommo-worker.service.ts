@@ -8,6 +8,8 @@ import { KommoEventRepository } from './repositories/kommo-event.repository';
 
 export const MAX_ATTEMPTS = 6;
 export const LEASE_SECONDS = 120;
+// 3 eventos x 3 chamadas Kommo x 10s de timeout = 90s < lease de 120s.
+export const MAX_EVENTS_PER_LEASE = 3;
 
 export function backoffSeconds(attempts: number): number {
   return Math.min(30 * 2 ** (attempts - 1), 3600);
@@ -30,7 +32,10 @@ export class KommoWorkerService {
     this.running = true;
     try {
       const batch = await this.events.claim(
-        this.config.get<number>('app.kommoWorkerBatchSize') || 10,
+        Math.min(
+          this.config.get<number>('app.kommoWorkerBatchSize') || 10,
+          MAX_EVENTS_PER_LEASE,
+        ),
         LEASE_SECONDS,
       );
       for (const event of batch) {

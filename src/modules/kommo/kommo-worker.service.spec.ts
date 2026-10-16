@@ -37,8 +37,14 @@ describe('KommoWorkerService', () => {
     events.claim.mockResolvedValue([ev('a')]);
     processor.process.mockResolvedValue('appt-1');
     await expect(worker.tick()).resolves.toBe(1);
-    expect(events.claim).toHaveBeenCalledWith(10, 120);
+    expect(events.claim).toHaveBeenCalledWith(3, 120);
     expect(events.markDone).toHaveBeenCalledWith('a', 'appt-1');
+  });
+
+  it('limita o claim ao tamanho do batch quando menor que o teto', async () => {
+    config.get.mockImplementation((k: string) => (k === 'app.kommoWorkerBatchSize' ? 2 : true));
+    await worker.tick();
+    expect(events.claim).toHaveBeenCalledWith(2, 120);
   });
 
   it('erro permanente → failed sem retry', async () => {

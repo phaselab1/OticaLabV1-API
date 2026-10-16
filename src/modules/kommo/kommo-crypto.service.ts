@@ -25,7 +25,7 @@ export class KommoCryptoService {
 
   encrypt(plain: string): string {
     const iv = randomBytes(12);
-    const cipher = createCipheriv(ALGO, this.key, iv);
+    const cipher = createCipheriv(ALGO, this.key, iv, { authTagLength: 16 });
     const data = Buffer.concat([cipher.update(plain, 'utf8'), cipher.final()]);
     return ['v1', iv, cipher.getAuthTag(), data].map((p) =>
       typeof p === 'string' ? p : p.toString('base64'),
@@ -34,7 +34,9 @@ export class KommoCryptoService {
 
   decrypt(payload: string): string {
     const [, iv, tag, data] = payload.split(':');
-    const decipher = createDecipheriv(ALGO, this.key, Buffer.from(iv, 'base64'));
+    const decipher = createDecipheriv(ALGO, this.key, Buffer.from(iv, 'base64'), {
+      authTagLength: 16,
+    });
     decipher.setAuthTag(Buffer.from(tag, 'base64'));
     return Buffer.concat([
       decipher.update(Buffer.from(data, 'base64')),

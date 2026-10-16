@@ -3,12 +3,13 @@ import { Test } from '@nestjs/testing';
 import { DatabaseModule } from '@/core/database/database.module';
 import { SecurityModule } from '@/core/security/security.module';
 import { SupabaseService } from '@/core/database/supabase.service';
+import { KommoAdminService } from './kommo-admin.service';
 import { KommoEventProcessorService } from './kommo-event-processor.service';
 import { KommoWorkerService } from './kommo-worker.service';
 import { KommoModule } from './kommo.module';
 
 describe('KommoModule', () => {
-  it('resolve o KommoEventProcessorService e o KommoWorkerService via DI', async () => {
+  it('resolve o processador, o worker e o KommoAdminService via DI', async () => {
     const moduleRef = await Test.createTestingModule({
       imports: [
         ConfigModule.forRoot({
@@ -29,5 +30,6 @@ describe('KommoModule', () => {
 
     expect(moduleRef.get(KommoEventProcessorService)).toBeInstanceOf(KommoEventProcessorService);
     expect(moduleRef.get(KommoWorkerService)).toBeInstanceOf(KommoWorkerService);
+    expect(moduleRef.get(KommoAdminService)).toBeInstanceOf(KommoAdminService);
   });
 });

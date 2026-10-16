@@ -1,6 +1,8 @@
 import { Module } from '@nestjs/common';
 import { AppointmentsModule } from '@/modules/appointments/appointments.module';
 import { CustomersModule } from '@/modules/customers/customers.module';
+import { KommoAdminController } from './kommo-admin.controller';
+import { KommoAdminService } from './kommo-admin.service';
 import { KommoClient } from './kommo-client';
 import {
   KOMMO_CLIENT_FACTORY,
@@ -15,9 +17,10 @@ import { KommoIntegrationRepository } from './repositories/kommo-integration.rep
 
 @Module({
   imports: [CustomersModule, AppointmentsModule],
-  controllers: [KommoWebhookController],
+  controllers: [KommoWebhookController, KommoAdminController],
   providers: [
     KommoCryptoService,
+    KommoAdminService,
     KommoWebhookService,
     KommoIntegrationRepository,
     KommoEventRepository,

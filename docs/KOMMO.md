@@ -2,6 +2,14 @@
 
 Quando um lead entra na etapa "agendado" no Kommo, o Salesbot chama o webhook da API. A API grava o evento em `kommo_events` (outbox) e um worker cria/atualiza cliente e agendamento, e escreve uma nota no lead.
 
+## Ordem de deploy
+
+1. Aplicar `0009_customer_matching.sql` e depois `0010_kommo_integration.sql` (cada uma é transacional).
+2. Definir `KOMMO_ENCRYPTION_KEY` (a mesma chave) em todas as réplicas. Sem ela a API não sobe.
+3. Só então publicar o código: o fluxo "Comparecer" já usa a função `match_customers_by_phone` da 0009.
+
+Observação: "Comparecer" sem telefone sempre cria cliente novo (sem flag de revisão).
+
 ## 1. Pré-requisitos
 
 - Aplicar, nesta ordem, `db/migrations/0009_customer_matching.sql` e `db/migrations/0010_kommo_integration.sql`.

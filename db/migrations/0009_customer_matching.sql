@@ -1,4 +1,5 @@
 -- Telefone é compartilhado por famílias: identidade = telefone + similaridade de nome.
+BEGIN;
 CREATE EXTENSION IF NOT EXISTS unaccent WITH SCHEMA extensions;
 CREATE EXTENSION IF NOT EXISTS pg_trgm WITH SCHEMA extensions;
 
@@ -32,3 +33,5 @@ $$;
 
 REVOKE ALL ON FUNCTION match_customers_by_phone(UUID, TEXT[], TEXT) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION match_customers_by_phone(UUID, TEXT[], TEXT) TO service_role;
+
+COMMIT;

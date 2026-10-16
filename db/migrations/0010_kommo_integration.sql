@@ -1,4 +1,5 @@
 -- Integração Kommo: config por empresa, outbox de eventos e vínculo de leads/contatos.
+BEGIN;
 
 CREATE TABLE kommo_integrations (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -201,3 +202,5 @@ REVOKE ALL ON FUNCTION upsert_kommo_appointment(
 GRANT EXECUTE ON FUNCTION upsert_kommo_appointment(
     UUID, UUID, UUID, BIGINT, UUID, VARCHAR, VARCHAR, TIMESTAMPTZ, BOOLEAN, TEXT, BOOLEAN, TEXT
 ) TO service_role;
+
+COMMIT;

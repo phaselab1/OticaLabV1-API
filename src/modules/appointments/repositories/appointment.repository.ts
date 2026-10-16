@@ -12,6 +12,21 @@ const UPDATE_WITH_HISTORY_FN = 'update_appointment_with_history';
 const APPOINTMENT_NOT_FOUND = 'P0002';
 const UNIQUE_VIOLATION = '23505';
 
+export interface KommoAppointmentInput {
+  companyId: string;
+  companyUnitId: string;
+  userId: string;
+  kommoLeadId: number;
+  customerId: string | null;
+  leadFullName: string;
+  leadPhone: string | null;
+  scheduledAt: string;
+  scheduledTimeUnknown: boolean;
+  notes: string | null;
+  needsReview: boolean;
+  reviewReason: string | null;
+}
+
 @Injectable()
 export class AppointmentRepository {
   constructor(private readonly supabase: SupabaseService) {}
@@ -199,5 +214,25 @@ export class AppointmentHistoryRepository {
       (data || []).map((row) => new AppointmentHistoryEntry(row)),
       count || 0,
     ];
+  }
+
+  async upsertFromKommo(input: KommoAppointmentInput): Promise<Appointment> {
+    const { data, error } = await this.db.rpc('upsert_kommo_appointment', {
+      p_company_id: input.companyId,
+      p_company_unit_id: input.companyUnitId,
+      p_user_id: input.userId,
+      p_kommo_lead_id: input.kommoLeadId,
+      p_customer_id: input.customerId,
+      p_lead_full_name: input.leadFullName,
+      p_lead_phone: input.leadPhone,
+      p_scheduled_at: input.scheduledAt,
+      p_scheduled_time_unknown: input.scheduledTimeUnknown,
+      p_notes: input.notes,
+      p_needs_review: input.needsReview,
+      p_review_reason: input.reviewReason,
+    });
+    if (error) throw error;
+    const rows = Array.isArray(data) ? data : [data];
+    return new Appointment(rows[0]);
   }
 }

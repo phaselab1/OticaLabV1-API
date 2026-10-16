@@ -122,8 +122,20 @@ export class AppointmentResponseDto {
   @ApiProperty()
   lead_full_name: string;
 
+  @ApiProperty({ nullable: true })
+  lead_phone: string | null;
+
+  @ApiProperty({ description: 'true = exibir "horário a confirmar" em vez da hora de scheduled_at' })
+  scheduled_time_unknown: boolean;
+
   @ApiProperty()
-  lead_phone: string;
+  needs_review: boolean;
+
+  @ApiProperty({ nullable: true })
+  review_reason: string | null;
+
+  @ApiProperty({ nullable: true })
+  kommo_lead_id: number | null;
 
   @ApiProperty({ nullable: true })
   customer_id: string | null;

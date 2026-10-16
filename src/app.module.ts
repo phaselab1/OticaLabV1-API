@@ -1,5 +1,6 @@
 import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { ScheduleModule } from '@nestjs/schedule';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { APP_GUARD } from '@nestjs/core';
 import appConfig from './config/app.config';
@@ -28,6 +29,7 @@ import { UsersModule } from './modules/users/users.module';
         limit: 100,
       },
     ]),
+    ScheduleModule.forRoot(),
     DatabaseModule,
     SecurityModule,
     HealthModule,

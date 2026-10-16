@@ -4,10 +4,11 @@ import { DatabaseModule } from '@/core/database/database.module';
 import { SecurityModule } from '@/core/security/security.module';
 import { SupabaseService } from '@/core/database/supabase.service';
 import { KommoEventProcessorService } from './kommo-event-processor.service';
+import { KommoWorkerService } from './kommo-worker.service';
 import { KommoModule } from './kommo.module';
 
 describe('KommoModule', () => {
-  it('resolve o KommoEventProcessorService via DI', async () => {
+  it('resolve o KommoEventProcessorService e o KommoWorkerService via DI', async () => {
     const moduleRef = await Test.createTestingModule({
       imports: [
         ConfigModule.forRoot({
@@ -27,5 +28,6 @@ describe('KommoModule', () => {
       .compile();
 
     expect(moduleRef.get(KommoEventProcessorService)).toBeInstanceOf(KommoEventProcessorService);
+    expect(moduleRef.get(KommoWorkerService)).toBeInstanceOf(KommoWorkerService);
   });
 });

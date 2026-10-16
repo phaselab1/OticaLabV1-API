@@ -7,6 +7,7 @@ import {
   KommoEventProcessorService,
 } from './kommo-event-processor.service';
 import { KommoCryptoService } from './kommo-crypto.service';
+import { KommoWorkerService } from './kommo-worker.service';
 import { KommoWebhookController } from './kommo-webhook.controller';
 import { KommoWebhookService } from './kommo-webhook.service';
 import { KommoEventRepository } from './repositories/kommo-event.repository';
@@ -21,6 +22,7 @@ import { KommoIntegrationRepository } from './repositories/kommo-integration.rep
     KommoIntegrationRepository,
     KommoEventRepository,
     KommoEventProcessorService,
+    KommoWorkerService,
     {
       provide: KOMMO_CLIENT_FACTORY,
       useValue: (subdomain: string, token: string) => new KommoClient(subdomain, token),

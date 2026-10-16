@@ -187,6 +187,26 @@ export class AppointmentRepository {
 
     return Boolean(data && data.length > 0);
   }
+
+  async upsertFromKommo(input: KommoAppointmentInput): Promise<Appointment> {
+    const { data, error } = await this.db.rpc('upsert_kommo_appointment', {
+      p_company_id: input.companyId,
+      p_company_unit_id: input.companyUnitId,
+      p_user_id: input.userId,
+      p_kommo_lead_id: input.kommoLeadId,
+      p_customer_id: input.customerId,
+      p_lead_full_name: input.leadFullName,
+      p_lead_phone: input.leadPhone,
+      p_scheduled_at: input.scheduledAt,
+      p_scheduled_time_unknown: input.scheduledTimeUnknown,
+      p_notes: input.notes,
+      p_needs_review: input.needsReview,
+      p_review_reason: input.reviewReason,
+    });
+    if (error) throw error;
+    const rows = Array.isArray(data) ? data : [data];
+    return new Appointment(rows[0]);
+  }
 }
 
 @Injectable()
@@ -214,25 +234,5 @@ export class AppointmentHistoryRepository {
       (data || []).map((row) => new AppointmentHistoryEntry(row)),
       count || 0,
     ];
-  }
-
-  async upsertFromKommo(input: KommoAppointmentInput): Promise<Appointment> {
-    const { data, error } = await this.db.rpc('upsert_kommo_appointment', {
-      p_company_id: input.companyId,
-      p_company_unit_id: input.companyUnitId,
-      p_user_id: input.userId,
-      p_kommo_lead_id: input.kommoLeadId,
-      p_customer_id: input.customerId,
-      p_lead_full_name: input.leadFullName,
-      p_lead_phone: input.leadPhone,
-      p_scheduled_at: input.scheduledAt,
-      p_scheduled_time_unknown: input.scheduledTimeUnknown,
-      p_notes: input.notes,
-      p_needs_review: input.needsReview,
-      p_review_reason: input.reviewReason,
-    });
-    if (error) throw error;
-    const rows = Array.isArray(data) ? data : [data];
-    return new Appointment(rows[0]);
   }
 }

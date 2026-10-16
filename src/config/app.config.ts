@@ -5,6 +5,9 @@ export interface AppConfig {
   debug: boolean;
   corsAllowedOrigins: string[];
   port: number;
+  kommoEncryptionKey: string;
+  kommoWorkerEnabled: boolean;
+  kommoWorkerBatchSize: number;
 }
 
 export default (): { app: AppConfig } => {
@@ -22,6 +25,9 @@ export default (): { app: AppConfig } => {
       debug: process.env.DEBUG === 'true',
       corsAllowedOrigins,
       port: parseInt(process.env.PORT || '8000', 10),
+      kommoEncryptionKey: process.env.KOMMO_ENCRYPTION_KEY || '',
+      kommoWorkerEnabled: process.env.KOMMO_WORKER_ENABLED !== 'false',
+      kommoWorkerBatchSize: parseInt(process.env.KOMMO_WORKER_BATCH_SIZE || '10', 10),
     },
   };
 };

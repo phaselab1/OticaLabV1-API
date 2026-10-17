@@ -1,12 +1,19 @@
 {
   "files.exclude": {
-    "**/.git": true,
-    "**/.DS_Store": true,
-    "**/dist": true,
-    "**/*.tsbuildinfo": true
+    "**/__pycache__": true,
+    "**/*.egg-info": true,
+    "**/.mypy_cache": true,
+    "**/.ruff_cache": true,
+    "**/.pytest_cache": true,
+    "**/.venv": true
   },
   "search.exclude": {
-    "**/dist": true,
-    "**/node_modules": true
-  }
+    "**/__pycache__": true,
+    "**/*.egg-info": true,
+    "**/.mypy_cache": true,
+    "**/.ruff_cache": true,
+    "**/.pytest_cache": true,
+    "**/.venv": true
+  },
+  "python.defaultInterpreterPath": "${workspaceFolder}/.venv/bin/python"
 }

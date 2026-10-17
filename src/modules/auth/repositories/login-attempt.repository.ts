@@ -19,7 +19,7 @@ export class LoginAttemptRepository {
       Date.now() - windowMinutes * 60 * 1000,
     ).toISOString();
     const { count, error } = await this.db
-      .table(TABLE)
+      .from(TABLE)
       .select('id', { count: 'exact' })
       .eq('email', email)
       .eq('success', false)
@@ -30,7 +30,7 @@ export class LoginAttemptRepository {
   }
 
   async record(email: string, success: boolean): Promise<void> {
-    const { error } = await this.db.table(TABLE).insert({ email, success });
+    const { error } = await this.db.from(TABLE).insert({ email, success });
     if (error) throw error;
   }
 }

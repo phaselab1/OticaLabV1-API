@@ -15,7 +15,7 @@ export class CustomerRepository {
 
   async create(data: Partial<Customer>): Promise<Customer> {
     const { data: rows, error } = await this.db
-      .table(TABLE)
+      .from(TABLE)
       .insert(data)
       .select();
 
@@ -37,7 +37,7 @@ export class CustomerRepository {
     companyUnitId?: string | null,
   ): Promise<[Customer[], number]> {
     let query = this.db
-      .table(TABLE)
+      .from(TABLE)
       .select('*', { count: 'exact' })
       .is('deleted_at', null);
 
@@ -61,7 +61,7 @@ export class CustomerRepository {
     fullName: string,
   ): Promise<Customer | null> {
     const { data, error } = await this.db
-      .table(TABLE)
+      .from(TABLE)
       .select('*')
       .eq('company_id', companyId)
       .eq('full_name', fullName)
@@ -74,7 +74,7 @@ export class CustomerRepository {
 
   async getById(customerId: string): Promise<Customer | null> {
     const { data, error } = await this.db
-      .table(TABLE)
+      .from(TABLE)
       .select('*')
       .eq('id', customerId)
       .is('deleted_at', null)
@@ -89,7 +89,7 @@ export class CustomerRepository {
     data: Partial<Customer>,
   ): Promise<Customer | null> {
     const { data: rows, error } = await this.db
-      .table(TABLE)
+      .from(TABLE)
       .update(data)
       .eq('id', customerId)
       .is('deleted_at', null)
@@ -108,7 +108,7 @@ export class CustomerRepository {
 
   async softDelete(customerId: string): Promise<boolean> {
     const { data, error } = await this.db
-      .table(TABLE)
+      .from(TABLE)
       .update({ deleted_at: new Date().toISOString() })
       .eq('id', customerId)
       .is('deleted_at', null)

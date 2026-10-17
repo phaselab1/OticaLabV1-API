@@ -18,7 +18,6 @@ describe('CustomersService', () => {
       create: vi.fn(),
       getAll: vi.fn(),
       getById: vi.fn(),
-      getByIdentity: vi.fn(),
       update: vi.fn(),
       softDelete: vi.fn(),
     };

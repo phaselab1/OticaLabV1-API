@@ -1,6 +1,7 @@
 import { ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
+import { NestExpressApplication } from '@nestjs/platform-express';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import compression from 'compression';
 import helmet from 'helmet';
@@ -9,7 +10,9 @@ import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { ResponseTransformInterceptor } from './common/interceptors/response-transform.interceptor';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  // Kommo envia form-urlencoded com chaves aninhadas (leads[status][0][id]); Express 5 não aninha por padrão.
+  app.useBodyParser('urlencoded', { extended: true, limit: '1mb' });
   const configService = app.get(ConfigService);
 
   // 1. Hardening de cabeçalhos HTTP para produção (Helmet)

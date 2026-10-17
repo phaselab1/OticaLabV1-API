@@ -1,5 +1,6 @@
 import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { ScheduleModule } from '@nestjs/schedule';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { APP_GUARD } from '@nestjs/core';
 import appConfig from './config/app.config';
@@ -7,6 +8,7 @@ import { DatabaseModule } from './core/database/database.module';
 import { SecurityModule } from './core/security/security.module';
 import { HttpLoggerMiddleware } from './common/middlewares/http-logger.middleware';
 import { AppointmentsModule } from './modules/appointments/appointments.module';
+import { KommoModule } from './modules/kommo/kommo.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { CompaniesModule } from './modules/companies/companies.module';
 import { CustomersModule } from './modules/customers/customers.module';
@@ -27,6 +29,7 @@ import { UsersModule } from './modules/users/users.module';
         limit: 100,
       },
     ]),
+    ScheduleModule.forRoot(),
     DatabaseModule,
     SecurityModule,
     HealthModule,
@@ -35,6 +38,7 @@ import { UsersModule } from './modules/users/users.module';
     CompaniesModule,
     CustomersModule,
     AppointmentsModule,
+    KommoModule,
   ],
   providers: [
     {

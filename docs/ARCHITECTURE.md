@@ -1,12 +1,12 @@
-# Arquitetura — Ótica Lab API (NestJS)
+# Arquitetura — Ótica Lab API
 
-Documentação completa da arquitetura: stack, camadas modulares, modelo de domínio, autenticação/autorização, banco de dados, tratamento de erros, escalabilidade, testes e fluxo de trabalho.
+Documentação completa da implementação: stack, camadas, modelo de domínio, autenticação/autorização, banco de dados, tratamento de erros, escalabilidade, testes e fluxo de trabalho.
 
 ## Sumário
 
 - [Visão geral](#visão-geral)
 - [Stack tecnológica](#stack-tecnológica)
-- [Arquitetura modular (NestJS)](#arquitetura-modular-nestjs)
+- [Arquitetura em camadas](#arquitetura-em-camadas)
 - [Estrutura de pastas](#estrutura-de-pastas)
 - [Modelo de domínio](#modelo-de-domínio)
 - [Autenticação e autorização](#autenticação-e-autorização)
@@ -14,6 +14,8 @@ Documentação completa da arquitetura: stack, camadas modulares, modelo de dom�
 - [Tratamento de erros](#tratamento-de-erros)
 - [Escalabilidade](#escalabilidade)
 - [Testes](#testes)
+- [Qualidade de código](#qualidade-de-código)
+- [Fluxo Git](#fluxo-git)
 - [Referência de endpoints](#referência-de-endpoints)
 - [Documentação interativa](#documentação-interativa)
 
@@ -21,7 +23,7 @@ Documentação completa da arquitetura: stack, camadas modulares, modelo de dom�
 
 ## Visão geral
 
-Sistema multi-tenant para clínicas/óticas com múltiplas empresas (`companies`) e unidades (`company_units`). Um agendamento (`appointments`) é criado direto numa unidade, com os dados de quem marcou (nome, telefone) guardados nele mesmo — como **lead**, sem linha em `customers`. Só quando o agendamento é marcado `attended` (compareceu) é que o lead vira de fato um cliente.
+Sistema multi-tenant para clínicas/óticas com múltiplas empresas (`companies`) e unidades (`company_units`). Um agendamento (`appointments`) é criado direto numa unidade, com os dados de quem marcou (nome, telefone) guardados nele mesmo — ainda como **lead**, sem linha em `customers`. Só quando o agendamento é marcado `attended` (compareceu) é que o lead vira de fato um cliente (veja [De lead a cliente](#de-lead-a-cliente)).
 
 ```
 company (empresa)
@@ -30,61 +32,70 @@ company (empresa)
         └── customer (cliente, só passa a existir a partir de um appointment attended)
 ```
 
-O acesso de um usuário a uma empresa/unidade é controlado por vínculos em `company_users`, exceto para `super_admin`, que tem acesso global irrestrito sem precisar de vínculo explícito.
+O acesso de um usuário a uma empresa/unidade é controlado por vínculos em `company_users`, exceto para `super_admin`, que tem acesso global sem precisar de vínculo explícito.
 
 ## Stack tecnológica
 
 | Camada | Escolha | Por quê |
 |---|---|---|
-| Framework HTTP | NestJS | Arquitetura corporativa opinionada, modular, injeção de dependência e ecossistema nativo TypeScript |
-| Validação/serialização | `class-validator` + `class-transformer` | Validação declarativa via decorators e tipagem forte em DTOs |
-| Documentação API | `@nestjs/swagger` | OpenAPI/Swagger gerado automaticamente e interativo em `/docs` |
-| Persistência | Supabase self-hosted (PostgREST) via `@supabase/supabase-js` | API REST de alto desempenho sobre PostgreSQL |
-| Autenticação | Passport JWT (`@nestjs/passport`, `passport-jwt`) + `bcryptjs` | Autenticação stateless, rate limit e timing-safe hashing |
-| Testes | Vitest | Execução ultrarrápida nativa TypeScript/ESM e compatibilidade total |
-| Container | Docker multi-stage | Imagem Alpine mínima para Node.js, com usuário seguro non-root |
+| Framework HTTP | FastAPI | Async nativo, validação via Pydantic, OpenAPI automático |
+| Validação/serialização | Pydantic v2 | Schemas tipados, `Field` com descrição/exemplo, validação declarativa |
+| Persistência | Supabase self-hosted (PostgREST) via `supabase-py` | Banco já rodando na VPS do cliente; API REST sobre Postgres sem precisar de driver SQL direto |
+| Autenticação | JWT (`python-jose`) + `bcrypt` | Stateless, sem sessão de servidor — necessário para escalar horizontalmente |
+| Lint/format | `ruff` | Uma ferramenta só cobre o que flake8+isort+black fariam juntos |
+| Type-check | `mypy --strict` | Pega erros de tipo antes de rodar |
+| Testes | `pytest` + `httpx`/`TestClient` | Testes de service (com repositories falsos) e de router (com `TestClient` + `dependency_overrides`) |
+| Container | Docker multi-stage | Imagem final sem toolchain de build, usuário non-root |
 
-## Arquitetura modular (NestJS)
+Não usamos SQLAlchemy/Alembic: como o acesso ao banco é via SDK do Supabase (PostgREST), não existe uma engine SQL local — as migrations são arquivos `.sql` versionados em [`db/migrations/`](../db/migrations/), aplicados manualmente no Supabase Studio.
 
-Cada feature é organizada como um módulo NestJS isolado seguindo o padrão Controller-Service-Repository:
+## Arquitetura em camadas
+
+Cada feature segue o mesmo fluxo unidirecional:
 
 ```
-HTTP Request → Controller → Service → Repository → Supabase (PostgREST) → PostgreSQL
+HTTP → Router → Service → Repository → Supabase (PostgREST) → Postgres
 ```
 
-| Camada | Responsabilidade |
-|---|---|
-| **Controller** | Mapeamento de rotas, decorators Swagger, validação via pipes, autorização via guards |
-| **Service** | Regras de negócio, autorização multi-tenant, orquestração e casos de uso |
-| **Repository** | Encapsulamento de chamadas PostgREST e tradução de erros de banco em exceções de domínio |
-| **Entity** | Representação tipada da linha do banco de dados |
-| **DTO** | Contrato de entrada/saída tipado com regras de validação |
-| **Module** | Declaração e amarração de injeção de dependência |
+| Camada | Responsabilidade | Não deve |
+|---|---|---|
+| **Router** | Traduzir HTTP ↔ chamada de aplicação; declarar schemas, status codes, docs OpenAPI | Conter SQL, regra de negócio, ou lidar com o ORM diretamente |
+| **Service** | Regras de negócio, casos de uso, coordenação entre repositories | Conhecer FastAPI/HTTP, montar resposta HTTP |
+| **Repository** | Encapsular acesso a dados (Supabase/PostgREST), traduzir erros de banco em exceções de domínio | Decidir regra de negócio (ex: "usuário pode fazer isso?") |
+| **Model** | Representação tipada de uma linha do banco (`dataclass` congelado), usado internamente | Conter regra de negócio |
+| **Schema** | Contrato HTTP de entrada/saída (Pydantic), nunca é o mesmo objeto que o Model | Acessar banco |
+| **Exceptions** | Exceções específicas da feature + registro do handler que as traduz em resposta HTTP | — |
+| **Dependencies** | Fiação de injeção de dependência (`Depends`) da feature | — |
+
+Essa separação é a mesma em toda feature nova — ver [`app/customers/`](../app/customers/) como referência mínima e [`app/companies/`](../app/companies/) como exemplo de uma feature que cresceu (3 entidades relacionadas: `Company`, `CompanyUnit`, `CompanyUserLink`).
 
 ## Estrutura de pastas
 
 ```
-src/
-├── main.ts                    # Bootstrap do NestJS (Pipes, Filters, Swagger, CORS)
-├── app.module.ts              # Módulo orquestrador raiz
-├── config/
-│   └── app.config.ts          # Configurações tipadas do ambiente (.env)
+app/
+├── main.py                    # composição: FastAPI(), handlers, routers, metadata OpenAPI
+│
 ├── core/
-│   ├── database/              # SupabaseService singleton injetável
-│   └── security/              # SecurityService (bcrypt timing-safe)
-├── common/
-│   ├── dto/                   # DTOs compartilhados (PaginationParamsDto, PageDto)
-│   ├── enums/                 # UserRole, AppointmentStatus
-│   ├── filters/               # AllExceptionsFilter (Postgres/HTTP error handling)
-│   └── utils/                 # formatTitleCase e utilitários de texto
-└── modules/
-    ├── health/                # GET /health
-    ├── auth/                  # Login, JWT, Rate Limiting, CurrentUser e RolesGuard
-    ├── users/                 # Usuários do sistema e escopo por permissão
-    ├── companies/             # Empresas, Unidades e Vínculos de Acesso
-    ├── customers/             # Clientes e resolução de escopo
-    └── appointments/          # Agendamentos, histórico imutável (RPC) e promoção de lead
+│   ├── config.py               # Settings (pydantic-settings), lê .env
+│   ├── database.py              # client Supabase singleton (lock-guarded) + shutdown gracioso
+│   ├── dependencies.py           # SupabaseClient, get_token_payload (agnóstico de feature)
+│   ├── exceptions.py              # NotFoundError/UnauthorizedError/ForbiddenError globais
+│   └── security.py                 # hash/verify de senha (bcrypt), JWT (jose)
+│
+├── shared/
+│   ├── pagination.py            # Page[T] / PaginationParams genéricos
+│   └── utils/postgrest.py        # as_row/as_rows — narrowing de tipo pro retorno do PostgREST
+│
+├── auth/          → POST /auth/login
+├── users/          → CRUD de usuários + get_current_user + require_role()
+├── companies/       → empresas + unidades + vínculos de acesso (company_users)
+├── customers/         → CRUD de clientes, com auto-preenchimento de empresa/unidade
+└── appointments/        → CRUD de agendamentos + histórico de auditoria imutável
 ```
+
+Cada feature (exceto `core`/`shared`) tem: `__init__.py`, `model.py`, `schema.py`, `repository.py`, `service.py`, `router.py`, `exceptions.py`, `dependencies.py`.
+
+**Regra de importação**: uma feature pode importar `core`, `shared`, e outras features quando existir uma dependência real de domínio (`appointments` → `customers` → `companies`, `companies` → `users`). `core` e `shared` **nunca** importam de uma feature — por isso `get_current_user`/`require_role()`, que dependem de `UserRepository`, vivem em `app/users/dependencies.py` e não em `core/dependencies.py`.
 
 ## Modelo de domínio
 
@@ -104,20 +115,272 @@ erDiagram
     appointments ||--o{ appointment_history : "auditoria"
     users ||--o{ appointments : "created_by/updated_by"
     users ||--o{ appointment_history : "changed_by"
+
+    users {
+        uuid id PK
+        varchar full_name
+        varchar email UK
+        varchar password_hash
+        user_role role
+        timestamptz deleted_at
+    }
+    companies {
+        uuid id PK
+        varchar name
+        varchar cnpj UK
+        char state
+        varchar city
+        uuid created_by_user_id FK
+        timestamptz deleted_at
+    }
+    company_units {
+        uuid id PK
+        uuid company_id FK
+        varchar name
+        varchar code
+        varchar cnpj UK
+        timestamptz deleted_at
+    }
+    company_users {
+        uuid id PK
+        uuid company_id FK
+        uuid user_id FK
+        uuid unit_id FK "nullable = empresa inteira"
+        uuid granted_by_user_id FK
+        timestamptz deleted_at
+    }
+    customers {
+        uuid id PK
+        uuid company_id FK
+        uuid company_unit_id FK
+        varchar full_name
+        varchar phone
+        uuid created_by_user_id FK
+        uuid updated_by_user_id FK
+        timestamptz deleted_at
+    }
+    appointments {
+        uuid id PK
+        uuid company_id FK
+        uuid company_unit_id FK
+        varchar lead_full_name "nome de quem marcou"
+        varchar lead_phone
+        uuid customer_id FK "nullable — só após attended"
+        uuid created_by_user_id FK
+        uuid updated_by_user_id FK
+        timestamptz scheduled_at
+        appointment_status status
+        text notes
+        timestamptz deleted_at
+    }
+    appointment_history {
+        uuid id PK
+        uuid appointment_id FK
+        uuid changed_by_user_id FK
+        timestamptz previous_scheduled_at
+        timestamptz new_scheduled_at
+        appointment_status previous_status
+        appointment_status new_status
+        timestamptz changed_at
+    }
 ```
+
+`appointment_history` é a única tabela sem soft delete — é *append-only*: um trigger (`trg_appointment_history_immutable`) recusa qualquer `UPDATE`/`DELETE`, mesmo para um superusuário do Postgres.
 
 ## Autenticação e autorização
 
-- **Login**: `POST /auth/login` retorna JWT stateless (expira em 24h).
-- **Proteção por papel**: `@Roles(UserRole.SUPER_ADMIN, ...)` combinado com `RolesGuard`.
-- **Auto-preenchimento e resolução de escopo**: `CompanyUserService.resolveCompanyAndUnit()` e `resolveScopeForList()`.
+### Fluxo
+
+1. `POST /auth/login` com e-mail/senha → devolve um JWT (expira em 60 min).
+2. Toda rota protegida exige `Authorization: Bearer <token>`.
+3. `get_current_user` ([`app/users/dependencies.py`](../app/users/dependencies.py)) decodifica o token, busca o usuário no banco (verifica que não está soft-deletado) e injeta o objeto `User` completo no endpoint.
+
+Não existe auto-registro. O primeiro usuário (`super_admin`) é inserido manualmente no banco — veja [`db/migrations/README.md`](../db/migrations/README.md).
+
+### Papéis (roles)
+
+| Role | Escopo de acesso | Ao cadastrar um cliente |
+|---|---|---|
+| `super_admin` | Global — todas as empresas/unidades, sem precisar de vínculo | Deve informar `company_id` **e** `company_unit_id` explicitamente |
+| `admin` | Toda a empresa vinculada (vínculo com `unit_id = NULL`) | `company_id` automático; `company_unit_id` ainda precisa ser escolhido |
+| `manager` | Uma unidade específica — **nunca** a empresa inteira (reforçado por trigger no banco) | Ambos automáticos (só tem acesso a uma unidade) |
+| `attendant` | Empresa inteira OU unidade(s) específica(s) | Automático se vinculado a exatamente uma unidade; senão precisa escolher |
+
+Só `super_admin` cria empresas, unidades e outros usuários (`require_role(UserRole.SUPER_ADMIN)`). Conceder/revogar acesso (`company_users`) exige `super_admin` **ou** `admin` com vínculo de empresa inteira na empresa em questão.
+
+### Algoritmo de auto-preenchimento
+
+Implementado em `CompanyUserService.resolve_company_and_unit()` ([`app/companies/service.py`](../app/companies/service.py)), chamado por `CustomerService.create()`:
+
+```
+se role == super_admin:
+    exige company_id E company_unit_id explícitos → senão 400
+
+senão:
+    se company_id não informado:
+        se usuário tem vínculo em exatamente 1 empresa → usa ela
+        senão → 400 (ambíguo, precisa escolher)
+    senão:
+        verifica que o usuário tem vínculo nessa empresa → senão 403
+
+    se company_unit_id não informado:
+        se o vínculo na empresa é de unidade específica única → usa ela
+        se o vínculo é de empresa inteira (unit_id NULL) → 400 (precisa escolher a unidade)
+        se há vínculos em mais de uma unidade → 400 (ambíguo)
+    senão:
+        verifica que o usuário tem acesso a essa unidade → senão 403
+```
+
+Essa mesma lógica de checagem de acesso (`has_unit_access`/`has_company_admin_access`) é reaproveitada por `AppointmentService` (o agendamento herda empresa/unidade do cliente, e o serviço confirma que o usuário autenticado tem acesso a essa unidade antes de criar/editar).
+
+### Defesa em profundidade: app + banco
+
+Toda regra de autorização é implementada **duas vezes**, de propósito:
+
+1. **No banco** (triggers `enforce_customer_company_access`, `enforce_appointment_company_access`, `enforce_company_users_manager_requires_unit`, função `user_has_unit_access()`) — é a fonte de verdade, vale mesmo que a aplicação tenha um bug ou que alguém edite dados direto no Supabase Studio.
+2. **Na aplicação** (`CompanyUserService`) — produz um erro 400/403 limpo e específico **antes** de bater no banco, em vez de deixar a exceção crua do Postgres (`RAISE EXCEPTION`) vazar como um erro genérico.
+
+## Banco de dados
+
+### Soft delete
+
+Toda tabela (exceto `appointment_history`) usa `deleted_at TIMESTAMPTZ` em vez de `DELETE` físico. Todo repository filtra `deleted_at IS NULL` em leituras, e "excluir" é sempre um `UPDATE` setando `deleted_at = now()`.
+
+Implicação real encontrada em produção: **unique constraints não excluem linhas soft-deleted** (ex: `uq_companies_cnpj`, `uq_users_email`) — um CNPJ ou e-mail usado uma vez fica "reservado" para sempre, mesmo depois de soft-deletado. Isso é intencional no schema fornecido; a collection do Postman gera valores únicos por execução exatamente por causa disso (veja [Postman](#documentação-interativa)).
+
+### Migrations
+
+Sem Alembic — [`db/migrations/0001_initial_schema.sql`](../db/migrations/0001_initial_schema.sql) é aplicado manualmente no SQL Editor do Supabase Studio. Mudanças futuras viram um novo arquivo `0002_...sql`, nunca uma edição do que já foi aplicado.
+
+[`0002_security_hardening.sql`](../db/migrations/0002_security_hardening.sql) (aplicar depois da `0001`) adiciona:
+
+- `ENABLE ROW LEVEL SECURITY` + `REVOKE ALL ... FROM anon, authenticated` em todas as tabelas — a API só acessa o banco via `service_role` (que ignora RLS), então isso é defesa em profundidade contra um eventual vazamento futuro da chave `anon`.
+- `SELECT ... FOR SHARE` nas 4 funções de trigger que liam o estado "ativo" (`deleted_at`) de um registro-pai sem travar a linha, fechando uma corrida onde a desativação concorrente da empresa/unidade/cliente-pai podia deixar um filho "vivo" pendurado num pai já desativado.
+- `SET search_path = public` em toda function, hardening padrão contra manipulação de `search_path`.
+- Tabela `login_attempts`, usada pelo rate limiting de `POST /auth/login` (veja abaixo).
+
+[`0003_restore_service_role_access.sql`](../db/migrations/0003_restore_service_role_access.sql) — correção de emergência: nesta instância self-hosted, `service_role` herda privilégios por membresia em `authenticated`/`anon` em vez de ter GRANTs próprios, então o `REVOKE` da `0002` cascateou e cortou o acesso da própria API. Restaura GRANTs explícitos + `BYPASSRLS` para `service_role`, independente de qualquer relação de herança de role.
+
+[`0004_appointment_leads.sql`](../db/migrations/0004_appointment_leads.sql) — base do fluxo de lead descrito em [De lead a cliente](#de-lead-a-cliente): `appointments.customer_id` vira nullable, e `company_id`/`company_unit_id`/`lead_full_name`/`lead_phone` passam a viver direto em `appointments` (antes só existiam via join em `customer_id`). Triggers de validação/autorização reescritos para usar essas colunas próprias; `update_appointment_with_history` ganha o parâmetro `p_customer_id`.
+
+[`0005_appointment_lead_duplicate_guard.sql`](../db/migrations/0005_appointment_lead_duplicate_guard.sql) — a `0004` tornar `customer_id` nullable quebrou silenciosamente `uq_appointments_customer_scheduled_at` para leads (`NULL` nunca colide num índice único), permitindo o mesmo lead ser agendado duas vezes no mesmo horário exato. Restaura essa proteção com um índice único parcial `(company_id, lead_full_name, scheduled_at) WHERE customer_id IS NULL AND deleted_at IS NULL`.
+
+[`0006_remove_date_of_birth.sql`](../db/migrations/0006_remove_date_of_birth.sql) — data de nascimento deixa de ser rastreada, tanto em `customers` quanto no lead de `appointments`; a identidade do cliente passa a ser só o nome completo por empresa. **Destrutiva**: qualquer data de nascimento já gravada é perdida ao rodar. Ajusta `uq_customers_company_id_full_name_date_of_birth` → `uq_customers_company_id_full_name` e `uq_appointments_lead_scheduled_at` para não referenciar mais a coluna removida.
+
+[`0007_simplify_appointment_status.sql`](../db/migrations/0007_simplify_appointment_status.sql) — remove `confirmed` do enum `appointment_status` (agendamentos nesse status voltam para `scheduled`) e renomeia `completed` para `attended`. Como Postgres não suporta remover valor de enum diretamente, o tipo é recriado do zero (`ALTER TYPE ... RENAME TO ..._old` + `CREATE TYPE` + `ALTER COLUMN ... TYPE` nas três colunas afetadas); a function `update_appointment_with_history` precisa ser recriada no meio do processo porque seu parâmetro referencia o tipo do enum.
+
+### Rate limiting de login
+
+`POST /auth/login` bloqueia (`429`) após 5 tentativas com falha para o mesmo e-mail em 15 minutos. O contador vive na tabela `login_attempts` (Postgres), não em memória do processo — necessário para a API escalar horizontalmente sem estado compartilhado entre instâncias. Cada tentativa (sucesso ou falha) também é registrada ali, servindo de trilha de auditoria básica de login.
+
+### Função RPC para auditoria atômica
+
+`PUT /appointments/{id}` precisa que o `UPDATE` em `appointments` e o `INSERT` em `appointment_history` aconteçam **na mesma transação**. Como o SDK do Supabase faz uma chamada HTTP por operação (sem transação entre duas chamadas da aplicação), a única forma correta é uma function no próprio Postgres:
+
+```sql
+update_appointment_with_history(p_appointment_id, p_changed_by_user_id, ...)
+```
+
+chamada via `client.rpc(...)` em [`app/appointments/repository.py`](../app/appointments/repository.py). Ela faz `SELECT ... FOR UPDATE`, o `UPDATE`, e o `INSERT` do histórico dentro da mesma transação SQL, e levanta `ERRCODE = 'P0002'` se o agendamento não existir — traduzido pela aplicação em `404`.
+
+### De lead a cliente
+
+`POST /appointments` não recebe `customer_id` — recebe `lead_full_name`/`lead_phone`, guardados direto no agendamento. Enquanto o status não é `attended`, não existe nenhuma linha em `customers`: é só um lead. Data de nascimento não é (mais) rastreada em nenhum dos dois — removida por completo na migration [`0006`](../db/migrations/0006_remove_date_of_birth.sql); a identidade do cliente passou a ser só o nome completo, por empresa.
+
+Quando `PUT /appointments/{id}` marca `status: "attended"` pela primeira vez, `AppointmentService._promote_lead_to_customer` procura um cliente já existente com o mesmo nome nesta empresa (`CustomerRepository.get_by_identity`) — se achar, reaproveita; senão cria um novo — e passa o `customer_id` resultante para `update_appointment_with_history` (parâmetro `p_customer_id`, adicionado na migration [`0004_appointment_leads.sql`](../db/migrations/0004_appointment_leads.sql)), que faz `COALESCE(p_customer_id, customer_id)` no mesmo `UPDATE` do status/histórico. `cancelled`/`no_show` nunca promovem o lead.
+
+A busca do cliente existente e a criação/atualização do agendamento são duas chamadas HTTP separadas (limitação do PostgREST — só a segunda parte, `UPDATE` + histórico, é atômica via RPC). Isso deixa uma janela de corrida (TOCTOU): duas completions concorrentes do mesmo lead (mesmo nome, mesma empresa) podem passar as duas pelo `SELECT` sem achar nada e colidir no `INSERT`. `AppointmentService._promote_lead_to_customer` trata isso — se o `create` estourar `CustomerAlreadyExistsError`, repete o `get_by_identity` uma vez e reaproveita a linha que a chamada concorrente vencedora acabou de commitar, em vez de propagar o erro. Falha de forma segura mesmo sem esse retry: o agendamento só é atualizado depois da promoção resolver, então nunca fica em estado parcial.
+
+O agendamento em si também não permite duplicidade: `uq_appointments_lead_scheduled_at` (índice único parcial da migration [`0005`](../db/migrations/0005_appointment_lead_duplicate_guard.sql)) bloqueia o mesmo lead marcando dois horários idênticos antes de ser promovido — espelhando `uq_appointments_customer_scheduled_at`, que já cobria esse caso para clientes.
+
+## Tratamento de erros
+
+Cada feature define suas próprias exceções (`XNotFoundError`, `XAlreadyExistsError`, etc.) e registra um handler que as traduz em `JSONResponse`. Nunca há `raise HTTPException` dentro de service/repository — a camada HTTP só existe no router/handler.
+
+| Situação | Exceção | HTTP |
+|---|---|---|
+| Recurso não encontrado (ou soft-deletado) | `XNotFoundError` | 404 |
+| Violação de constraint única (ex: CNPJ, e-mail, cliente duplicado) | `XAlreadyExistsError` | 409 |
+| Token ausente/inválido | `UnauthorizedError` (core) | 401 |
+| Role/acesso insuficiente | `ForbiddenError` (core) | 403 |
+| `company_id`/`company_unit_id` ambíguos ou faltando | `CompanyOrUnitRequiredError` | 400 |
+| `manager` vinculado sem unidade específica | `ManagerRequiresUnitError` | 400 |
+| Credenciais de login inválidas | `InvalidCredentialsError` | 401 |
+| Validação de schema (Pydantic) | — | 422 |
+
+Repositories traduzem erros do Postgres (`APIError.code`) em exceções de domínio — ex: `23505` (unique_violation) → `XAlreadyExistsError`; `P0002` (customizado na function RPC) → `AppointmentNotFoundError`.
+
+Para qualquer `APIError` que **não** seja tratada num repository específico, [`app/core/exceptions.py`](../app/core/exceptions.py) registra um handler global (`postgrest_api_error_handler`) que cobre os casos mais comuns de erro de input propagando cru do Postgres, em vez de cair no fallback genérico `500`:
+
+| SQLSTATE | Situação | HTTP |
+|---|---|---|
+| `22P02` (invalid_text_representation) | Path/body param que devia ser UUID não é um (formato inválido) | 404 |
+| `23503` (foreign_key_violation) | Constraint de FK crua rejeitando a linha (caminho raramente alcançado — normalmente as triggers de validação de pai, abaixo, capturam antes) | 404 |
+| `P0001` (raise_exception sem ERRCODE explícito) | Qualquer trigger de validação/autorização (`enforce_*_parents_valid`, `enforce_*_company_access`, `enforce_company_users_manager_requires_unit`, ...) rejeitando a operação — inclui o caso de `company_id`/`company_unit_id`/`customer_id` com UUID válido mas inexistente, que essas triggers pegam antes da FK ter chance de rejeitar | 400, com a mensagem da trigger repassada em `detail` |
+| qualquer outro código | Não mapeado — logado via `logger.error` e devolvido sem detalhe | 500 |
+
+As mensagens de `RAISE EXCEPTION` nas migrations só ecoam IDs que o próprio caller já enviou ou uma descrição de regra de negócio (nunca schema interno ou segredo), por isso é seguro repassar `P0001` como `detail` de um jeito que não seria pra um `500` genérico.
+
+## Escalabilidade
+
+Requisito explícito do projeto: a API precisa escalar tanto verticalmente (mais CPU/RAM por instância) quanto horizontalmente (mais réplicas atrás de um load balancer).
+
+- **Stateless**: autenticação via JWT, sem sessão de servidor. Nenhuma feature guarda estado em memória do processo.
+- **Singleton do client Supabase com lock** ([`app/core/database.py`](../app/core/database.py)): `asyncio.Lock` com double-checked locking evita criar clients duplicados sob concorrência na inicialização.
+- **Shutdown gracioso**: o `lifespan` do FastAPI fecha a sessão HTTP do client Supabase no encerramento — evita conexões penduradas ao escalar/reiniciar réplicas.
+- **Docker multi-stage** ([`Dockerfile`](../Dockerfile)): imagem final sem toolchain de build, usuário non-root, número de workers configurável via `WEB_CONCURRENCY` (escala vertical de uma única instância).
+- **Sem estado no Postgres direto**: acesso via PostgREST, que já faz pooling do lado do Supabase — a aplicação nunca gerencia um pool de conexões próprio.
 
 ## Testes
 
-```bash
-# Executa todos os testes unitários
-npm test
+61 testes, duas estratégias por feature (conforme o documento de arquitetura original do projeto):
 
-# Compila o projeto em modo de produção
-npm run build
+- **Testes de service**: repositories falsos (fakes in-memory), testando regra de negócio isolada — inclusive todas as combinações do algoritmo de auto-preenchimento por role.
+- **Testes de router**: `TestClient` do FastAPI + `dependency_overrides`, testando o contrato HTTP (status codes, autenticação, serialização).
+
+```bash
+.venv/bin/pytest -v
 ```
+
+Além dos testes automatizados, a [collection do Postman](#documentação-interativa) foi validada via `newman` (CLI oficial do Postman) **contra o Supabase self-hosted real**, duas vezes seguidas sem reset manual, confirmando que a documentação bate com o comportamento real da API em produção.
+
+## Qualidade de código
+
+- `ruff check` + `ruff format` — lint e formatação.
+- `mypy --strict` — checagem de tipos.
+- `pre-commit` roda os três em todo commit automaticamente.
+
+Comentários no código só existem quando explicam um "porquê" não óbvio (uma decisão, uma restrição do schema, um workaround) — nunca para descrever o que uma linha já diz sozinha.
+
+## Fluxo Git
+
+- **Conventional Commits** (`feat:`, `fix:`, `chore:`, ...).
+- **Trunk-based com PR obrigatório**: `main` nunca recebe push direto; toda mudança nasce num branch (`feat/...`, `fix/...`, `chore/...`) e entra via Pull Request, com squash-merge.
+
+## Referência de endpoints
+
+Documentação completa e interativa de cada endpoint (parâmetros, schemas, exemplos, todos os códigos de erro possíveis) está no Swagger — veja [Documentação interativa](#documentação-interativa). Resumo:
+
+| Recurso | Endpoints | Quem pode |
+|---|---|---|
+| Auth | `POST /auth/login` | Público |
+| Users | `POST` `PUT` `DELETE /users` | `super_admin` |
+| Users | `GET /users`, `GET /users/{id}` | Qualquer autenticado |
+| Companies | `POST` `PUT` `DELETE /companies` | `super_admin` |
+| Companies | `GET /companies` (escopado), `GET /companies/{id}` | Qualquer autenticado |
+| Company Units | `POST` `PUT` `DELETE /companies/{id}/units` | `super_admin` |
+| Company Units | `GET /companies/{id}/units[/{id}]` | Qualquer autenticado |
+| Access Grants | `POST /companies/{id}/users`, `DELETE .../users/{link_id}` | `super_admin` ou `admin` da empresa |
+| Access Grants | `GET /companies/{id}/users` | `super_admin` ou `admin` da empresa |
+| Customers | `POST` `PUT /customers` | Autenticado com acesso à unidade |
+| Customers | `GET /customers`, `DELETE /customers/{id}` | Qualquer autenticado |
+| Appointments | `POST` `PUT /appointments` | Autenticado com acesso à unidade do cliente |
+| Appointments | `GET /appointments`, `GET .../history`, `DELETE /appointments/{id}` | Qualquer autenticado |
+| Health | `GET /health` | Público |
+
+## Documentação interativa
+
+- **Swagger UI**: `http://localhost:8000/docs` — todo endpoint tem descrição, exemplos de request/response, e a lista completa de status codes possíveis (incluindo 400/401/403/404/409/422 quando aplicável).
+- **ReDoc**: `http://localhost:8000/redoc` — mesma spec, layout alternativo.
+- **OpenAPI JSON bruto**: `http://localhost:8000/openapi.json`.
+- **Postman**: [`docs/postman/OticaLabV1-API.postman_collection.json`](postman/OticaLabV1-API.postman_collection.json) — 49 requests em 7 pastas (Health, Auth, Users, Companies, Customers, Appointments, Cleanup), cobrindo todo caminho feliz **e** os principais casos de erro. Autenticação e encadeamento de IDs entre requests são automáticos via scripts de teste (`pm.collectionVariables`) — rode as pastas em ordem, de cima para baixo. A pasta **Cleanup**, no fim, reverte tudo (soft delete), deixando a coleção pronta para rodar de novo do zero.

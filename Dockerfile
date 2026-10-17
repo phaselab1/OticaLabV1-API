@@ -1,24 +1,36 @@
-FROM python:3.12-slim AS builder
+# Build stage
+FROM node:24-alpine AS builder
 
 WORKDIR /app
 
-COPY pyproject.toml ./
-COPY app ./app
+COPY package*.json ./
+COPY tsconfig*.json ./
+COPY nest-cli.json ./
 
-RUN pip install --no-cache-dir --prefix=/install .
+RUN npm ci --legacy-peer-deps
 
-FROM python:3.12-slim
+COPY src ./src
 
-RUN useradd --create-home --shell /bin/bash app
+RUN npm run build
 
-COPY --from=builder /install /usr/local
+# Production stage
+FROM node:24-alpine
 
 WORKDIR /app
-USER app
 
-ENV PYTHONUNBUFFERED=1
+RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+
+COPY package*.json ./
+
+RUN npm ci --omit=dev --legacy-peer-deps && npm cache clean --force
+
+COPY --from=builder /app/dist ./dist
+
+USER appuser
+
+ENV NODE_ENV=production
 ENV PORT=8000
 
 EXPOSE 8000
 
-CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000} --workers ${WEB_CONCURRENCY:-4}"]
+CMD ["node", "dist/main.js"]
